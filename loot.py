@@ -172,6 +172,8 @@ def get_loot_threshold(
         "attacker_damages": attacker_damages,
         "attacker_points": attacker_points,
     })
+
+
 def generate_html():
     from datetime import datetime
     from html import escape
@@ -257,57 +259,9 @@ h1 {{
     font-size: 16px;
 }}
 
-/* Damage / points comparison section */
-.comparison {{
-    margin: 10px 0 14px;
-}}
-
-.comparison-title {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
-    color: #9ca3af;
-    font-size: 10px;
-    font-weight: bold;
-    text-transform: uppercase;
-}}
-
-.comparison-bar {{
-    width: 100%;
-    height: 24px;
-    display: flex;
-    overflow: hidden;
-    border-radius: 12px;
-    background: #1f2937;
-}}
-
-.comparison-segment {{
-    height: 100%;
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    padding: 0 8px;
-    font-size: 10px;
-    font-weight: bold;
-    color: white;
-    white-space: nowrap;
-}}
-
-.comparison-segment.defender {{
-    justify-content: flex-start;
-    background: #2563eb;
-}}
-
-.comparison-segment.attacker {{
-    justify-content: flex-end;
-    background: #dc2626;
-}}
-
-.comparison-segment span {{
-    overflow: hidden;
-    text-overflow: ellipsis;
-}}
+/* -------------------------
+   Damage bars
+   ------------------------- */
 
 .bar {{
     height: 18px;
@@ -334,6 +288,130 @@ h1 {{
 .blue {{ background: #2563eb; }}
 .green {{ background: #16a34a; }}
 
+/* -------------------------
+   Comparison sections
+   ------------------------- */
+
+.comparison {{
+    margin: 10px 0 14px;
+}}
+
+.comparison-title {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+    color: #9ca3af;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}}
+
+/* -------------------------
+   Damage comparison bar
+   Defender = left
+   Attacker = right
+   ------------------------- */
+
+.comparison-bar {{
+    width: 100%;
+    height: 24px;
+    display: flex;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #1f2937;
+}}
+
+.comparison-segment {{
+    height: 100%;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+}}
+
+.comparison-segment.defender {{
+    justify-content: flex-start;
+    background: #2563eb;
+}}
+
+.comparison-segment.attacker {{
+    justify-content: flex-end;
+    background: #dc2626;
+}}
+
+.comparison-segment span {{
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+
+/* -------------------------
+   Points progress bar
+   Each side gets 50% of the
+   total bar and fills toward
+   the center.
+   ------------------------- */
+
+.points-bar {{
+    position: relative;
+    width: 100%;
+    height: 24px;
+    display: flex;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #1f2937;
+}}
+
+.points-side {{
+    position: relative;
+    width: 50%;
+    height: 100%;
+    background: #374151;
+}}
+
+.points-fill {{
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+}}
+
+.points-fill.defender {{
+    left: 0;
+    justify-content: flex-start;
+    background: #2563eb;
+}}
+
+.points-fill.attacker {{
+    right: 0;
+    justify-content: flex-end;
+    background: #dc2626;
+}}
+
+.points-center {{
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background: #f8fafc;
+    opacity: 0.8;
+    z-index: 2;
+}}
+
 .footer {{
     margin-top: 20px;
     text-align: center;
@@ -357,28 +435,59 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
         defender = escape(str(battle["defender"]))
         region = escape(str(battle["region"]))
 
+        # -------------------------
+        # Battle values
+        # -------------------------
+
         defender_damage = battle.get("defender_damages", 0) or 0
         attacker_damage = battle.get("attacker_damages", 0) or 0
 
         defender_points = battle.get("defender_points", 0) or 0
         attacker_points = battle.get("attacker_points", 0) or 0
 
-        # Calculate percentages for split bars
+        # -------------------------
+        # Damage percentages
+        # Based on total damage.
+        # Defender always left,
+        # attacker always right.
+        # -------------------------
+
         total_damage = defender_damage + attacker_damage
+
         if total_damage > 0:
-            defender_damage_pct = defender_damage / total_damage * 100
-            attacker_damage_pct = attacker_damage / total_damage * 100
+            defender_damage_pct = (
+                defender_damage / total_damage
+            ) * 100
+
+            attacker_damage_pct = (
+                attacker_damage / total_damage
+            ) * 100
         else:
             defender_damage_pct = 50
             attacker_damage_pct = 50
 
-        total_points = defender_points + attacker_points
-        if total_points > 0:
-            defender_points_pct = defender_points / total_points * 100
-            attacker_points_pct = attacker_points / total_points * 100
-        else:
-            defender_points_pct = 50
-            attacker_points_pct = 50
+        # -------------------------
+        # Points percentages
+        # Fixed goal = 300.
+        #
+        # Each side owns 50% of the
+        # total bar.
+        #
+        # Defender fills left -> center
+        # Attacker fills right -> center
+        # -------------------------
+
+        points_goal = 300
+
+        defender_points_pct = min(
+            max(defender_points / points_goal * 100, 0),
+            100
+        )
+
+        attacker_points_pct = min(
+            max(attacker_points / points_goal * 100, 0),
+            100
+        )
 
         html += f"""
 <div class="card">
@@ -390,70 +499,112 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
             <small>Players</small>
             <b>{battle['participants']:,}</b>
         </div>
+
         <div class="metric">
             <small>Rank</small>
             <b>{battle['rank']}</b>
         </div>
+
         <div class="metric">
             <small>Need</small>
-            <b style="color:#4ade80;">{battle['need']:,}</b>
+            <b style="color:#4ade80;">
+                {battle['need']:,}
+            </b>
         </div>
     </div>
 
-    <!-- DAMAGE -->
+    <!-- =========================
+         DAMAGE
+         ========================= -->
+
     <div class="comparison">
         <div class="comparison-title">
             <span>Damage</span>
-            <span>{defender_damage + attacker_damage:,} total</span>
+            <span>{total_damage:,} total</span>
         </div>
 
         <div class="comparison-bar">
+
+            <!-- Defender: always LEFT -->
             <div
                 class="comparison-segment defender"
                 style="width:{defender_damage_pct:.1f}%"
                 title="{defender}: {defender_damage:,}"
             >
-                <span>{defender} {defender_damage:,}</span>
+                <span>
+                    {defender} {defender_damage:,}
+                </span>
             </div>
 
+            <!-- Attacker: always RIGHT -->
             <div
                 class="comparison-segment attacker"
                 style="width:{attacker_damage_pct:.1f}%"
                 title="{attacker}: {attacker_damage:,}"
             >
-                <span>{attacker} {attacker_damage:,}</span>
+                <span>
+                    {attacker} {attacker_damage:,}
+                </span>
             </div>
+
         </div>
     </div>
 
-    <!-- POINTS -->
+    <!-- =========================
+         POINTS
+         ========================= -->
+
     <div class="comparison">
         <div class="comparison-title">
-            <span>Points</span>
-            <span>{defender_points + attacker_points:,} total</span>
+            <span>Points to Win</span>
+            <span>Goal: {points_goal}</span>
         </div>
 
-        <div class="comparison-bar">
-            <div
-                class="comparison-segment defender"
-                style="width:{defender_points_pct:.1f}%"
-                title="{defender}: {defender_points:,}"
-            >
-                <span>{defender} {defender_points:,}</span>
+        <div class="points-bar">
+
+            <!-- Defender
+                 LEFT -> CENTER -->
+            <div class="points-side defender-side">
+                <div
+                    class="points-fill defender"
+                    style="width:{defender_points_pct:.1f}%"
+                    title="{defender}: {defender_points:,} / {points_goal}"
+                >
+                    <span>
+                        {defender} {defender_points:,}/{points_goal}
+                    </span>
+                </div>
             </div>
 
-            <div
-                class="comparison-segment attacker"
-                style="width:{attacker_points_pct:.1f}%"
-                title="{attacker}: {attacker_points:,}"
-            >
-                <span>{attacker} {attacker_points:,}</span>
+            <!-- Attacker
+                 RIGHT -> CENTER -->
+            <div class="points-side attacker-side">
+                <div
+                    class="points-fill attacker"
+                    style="width:{attacker_points_pct:.1f}%"
+                    title="{attacker}: {attacker_points:,} / {points_goal}"
+                >
+                    <span>
+                        {attacker} {attacker_points:,}/{points_goal}
+                    </span>
+                </div>
             </div>
+
+            <!-- Center / win line -->
+            <div class="points-center"></div>
+
         </div>
     </div>
 """
 
-        max_dmg = max(battle["thresholds"].values(), default=1)
+        # -------------------------
+        # Threshold bars
+        # -------------------------
+
+        max_dmg = max(
+            battle["thresholds"].values(),
+            default=1
+        )
 
         for color, dmg in sorted(
             battle["thresholds"].items(),
@@ -464,7 +615,10 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
 
             html += f"""
     <div class="bar">
-        <div class="fill {color}" style="width:{width:.1f}%">
+        <div
+            class="fill {color}"
+            style="width:{width:.1f}%"
+        >
             <span>{color.upper()}</span>
             <span>{dmg:,}</span>
         </div>
