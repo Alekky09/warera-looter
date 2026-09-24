@@ -274,7 +274,12 @@ h1 {{
     margin: 8px 0 10px;
 }}
 
-/* Country labels above the bars */
+/* -----------------------------------------
+   Country labels
+   Defender = LEFT
+   Attacker = RIGHT
+   ----------------------------------------- */
+
 .side-labels {{
     display: flex;
     width: 100%;
@@ -305,10 +310,9 @@ h1 {{
 }}
 
 /* -----------------------------------------
-   POINTS BAR
-   Each side has 300 points maximum.
-   Defender fills left -> center.
-   Attacker fills right -> center.
+   Points progress bar
+   Both sides grow toward the center.
+   300 points = full half.
    ----------------------------------------- */
 
 .points-bar {{
@@ -319,7 +323,7 @@ h1 {{
     overflow: hidden;
     border-radius: 5px;
     background: #1f2937;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }}
 
 .points-side {{
@@ -357,28 +361,10 @@ h1 {{
     z-index: 2;
 }}
 
-/* Point values */
-.points-values {{
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    margin-bottom: 10px;
-    font-size: 10px;
-    color: #94a3b8;
-}}
-
-.points-value.defender {{
-    text-align: left;
-}}
-
-.points-value.attacker {{
-    text-align: right;
-}}
-
 /* -----------------------------------------
-   DAMAGE BAR
-   Defender = left
-   Attacker = right
+   Damage comparison bar
+   Defender = LEFT
+   Attacker = RIGHT
    ----------------------------------------- */
 
 .damage-bar {{
@@ -420,24 +406,25 @@ h1 {{
 }}
 
 /* -----------------------------------------
-   THRESHOLD BARS
+   Threshold bars
+   Smaller and only show the number.
    ----------------------------------------- */
 
 .bar {{
-    height: 18px;
+    height: 14px;
     background: #1f2937;
-    border-radius: 9px;
+    border-radius: 7px;
     overflow: hidden;
-    margin: 6px 0;
+    margin: 4px 0;
 }}
 
 .fill {{
     height: 100%;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 8px;
-    font-size: 10px;
+    justify-content: flex-end;
+    padding: 0 6px;
+    font-size: 9px;
     font-weight: bold;
     color: white;
 }}
@@ -496,7 +483,7 @@ h1 {{
         attacker_points = battle.get("attacker_points", 0) or 0
 
         # -----------------------------------------
-        # DAMAGE PERCENTAGES
+        # Damage percentages
         # -----------------------------------------
 
         total_damage = defender_damage + attacker_damage
@@ -514,12 +501,7 @@ h1 {{
             attacker_damage_pct = 50
 
         # -----------------------------------------
-        # POINTS PROGRESS
-        # Fixed goal = 300
-        #
-        # Each side gets exactly half the bar.
-        # Defender grows LEFT -> CENTER.
-        # Attacker grows RIGHT -> CENTER.
+        # Points progress toward 300
         # -----------------------------------------
 
         points_goal = 300
@@ -535,7 +517,7 @@ h1 {{
         )
 
         # -----------------------------------------
-        # COMPACT DAMAGE VALUES
+        # Compact damage values
         # -----------------------------------------
 
         defender_damage_display = compact_number(defender_damage)
@@ -543,7 +525,7 @@ h1 {{
         total_damage_display = compact_number(total_damage)
 
         # -----------------------------------------
-        # CARD
+        # Card
         # -----------------------------------------
 
         html += f"""
@@ -602,18 +584,7 @@ h1 {{
 
     </div>
 
-    <!-- Point numbers -->
-    <div class="points-values">
-        <div class="points-value defender">
-            {defender_points:,}
-        </div>
-
-        <div class="points-value attacker">
-            {attacker_points:,}
-        </div>
-    </div>
-
-    <!-- Damage comparison bar -->
+    <!-- Damage comparison -->
     <div
         class="damage-bar"
         title="Total damage: {total_damage_display}"
@@ -641,7 +612,7 @@ h1 {{
 """
 
         # -----------------------------------------
-        # THRESHOLD BARS
+        # Threshold bars
         # -----------------------------------------
 
         max_dmg = max(
@@ -662,7 +633,6 @@ h1 {{
             class="fill {color}"
             style="width:{width:.1f}%"
         >
-            <span>{color.upper()}</span>
             <span>{compact_number(dmg)}</span>
         </div>
     </div>
