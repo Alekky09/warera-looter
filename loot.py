@@ -383,7 +383,6 @@ h1 {{
 /* ---------------------------------------------------------
    Points progress bar
    Both sides grow toward the center.
-   300 points = full half.
    --------------------------------------------------------- */
 
 .points-bar {{
@@ -445,10 +444,9 @@ h1 {{
 }}
 
 /* ---------------------------------------------------------
-   DAMAGE BAR
-   Defender = LEFT
-   Attacker = RIGHT
-   Numbers stay inside the colored sections.
+   Damage comparison bar
+   Defender = left
+   Attacker = right
    --------------------------------------------------------- */
 
 .damage-wrapper {{
@@ -503,22 +501,20 @@ h1 {{
 
 /* ---------------------------------------------------------
    Threshold bars
-   Smaller, with only the number.
+   Modern compact progress indicators
    --------------------------------------------------------- */
 
 .thresholds {{
-    margin-top: 13px;
-    padding-top: 12px;
+    margin-top: 15px;
+    padding-top: 13px;
     border-top: 1px solid rgba(148, 163, 184, 0.08);
 }}
 
 .threshold-row {{
     position: relative;
-    display: flex;
-    align-items: center;
     width: 100%;
-    height: 13px;
-    margin: 5px 0;
+    height: 16px;
+    margin: 6px 0;
 }}
 
 .threshold-track {{
@@ -526,7 +522,15 @@ h1 {{
     inset: 0;
     overflow: hidden;
     border-radius: 999px;
-    background: #1a2434;
+    background:
+        linear-gradient(
+            90deg,
+            rgba(30, 41, 59, 0.95),
+            rgba(24, 33, 48, 0.95)
+        );
+    box-shadow:
+        inset 0 1px 2px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 1px rgba(255,255,255,0.025);
 }}
 
 .threshold-fill {{
@@ -535,82 +539,114 @@ h1 {{
     left: 0;
     height: 100%;
     border-radius: 999px;
+    transition: width 0.2s ease;
 }}
+
+/* Red */
+.threshold-fill.red {{
+    background: linear-gradient(
+        90deg,
+        #991b1b,
+        #dc2626,
+        #f87171
+    );
+    box-shadow:
+        0 0 10px rgba(239, 68, 68, 0.30);
+}}
+
+/* Gold */
+.threshold-fill.gold {{
+    background: linear-gradient(
+        90deg,
+        #a16207,
+        #eab308,
+        #fde047
+    );
+    box-shadow:
+        0 0 10px rgba(234, 179, 8, 0.28);
+}}
+
+/* Purple */
+.threshold-fill.purple {{
+    background: linear-gradient(
+        90deg,
+        #6b21a8,
+        #9333ea,
+        #c084fc
+    );
+    box-shadow:
+        0 0 10px rgba(168, 85, 247, 0.28);
+}}
+
+/* Blue */
+.threshold-fill.blue {{
+    background: linear-gradient(
+        90deg,
+        #1d4ed8,
+        #2563eb,
+        #60a5fa
+    );
+    box-shadow:
+        0 0 10px rgba(59, 130, 246, 0.28);
+}}
+
+/* Green */
+.threshold-fill.green {{
+    background: linear-gradient(
+        90deg,
+        #166534,
+        #16a34a,
+        #4ade80
+    );
+    box-shadow:
+        0 0 10px rgba(34, 197, 94, 0.28);
+}}
+
+/*
+ * Value badge.
+ *
+ * Always visible and high contrast.
+ * It sits over the right side of the bar so it
+ * remains readable even when the colored fill
+ * is very short.
+ */
 
 .threshold-number {{
     position: absolute;
     top: 50%;
-    z-index: 3;
-    transform: translateY(-50%);
-    font-size: 8px;
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
-    pointer-events: none;
-}}
-
-/*
- * Normal case:
- * number sits in the unused dark area immediately
- * after the colored fill.
- */
-.threshold-number.outside {{
-    color: #94a3b8;
-    left: var(--fill-end);
-    margin-left: 5px;
-}}
-
-/*
- * When the fill is large enough, put the number
- * inside the colored area on the right.
- */
-.threshold-number.inside {{
     right: 6px;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    z-index: 5;
+    transform: translateY(-50%);
+
+    display: flex;
+    align-items: center;
+
+    min-height: 14px;
+    padding: 2px 6px;
+
+    border-radius: 999px;
+
+    background: rgba(9, 15, 27, 0.72);
+    border: 1px solid rgba(255,255,255,0.10);
+
+    color: #f8fafc;
+    font-size: 9px;
+    line-height: 1;
+    font-weight: 750;
+    letter-spacing: 0.1px;
+
+    white-space: nowrap;
+
+    box-shadow:
+        0 1px 4px rgba(0,0,0,0.35),
+        inset 0 1px 0 rgba(255,255,255,0.05);
+
+    backdrop-filter: blur(4px);
 }}
 
-/* Threshold colors */
-
-.red {{
-    background: linear-gradient(
-        90deg,
-        #b91c1c,
-        #ef4444
-    );
-}}
-
-.gold {{
-    background: linear-gradient(
-        90deg,
-        #ca8a04,
-        #eab308
-    );
-}}
-
-.purple {{
-    background: linear-gradient(
-        90deg,
-        #7e22ce,
-        #a855f7
-    );
-}}
-
-.blue {{
-    background: linear-gradient(
-        90deg,
-        #1d4ed8,
-        #3b82f6
-    );
-}}
-
-.green {{
-    background: linear-gradient(
-        90deg,
-        #15803d,
-        #22c55e
-    );
-}}
+/* ---------------------------------------------------------
+   Footer
+   --------------------------------------------------------- */
 
 .footer {{
     margin-top: 24px;
@@ -777,7 +813,7 @@ h1 {{
 
     </div>
 
-    <!-- Threshold bars -->
+    <!-- Thresholds -->
     <div class="thresholds">
 """
 
@@ -795,35 +831,27 @@ h1 {{
             key=lambda x: x[1],
             reverse=True
         ):
-            width = (dmg / max_dmg) * 100
-
-            # If the fill is small, put the number in the
-            # unused space. Otherwise put it inside the fill.
-            #
-            # 18% is a conservative threshold that leaves
-            # enough room for numbers such as "2.4M".
-            label_inside = width >= 18
-
-            label_class = (
-                "threshold-number inside"
-                if label_inside
-                else "threshold-number outside"
+            width = min(
+                (dmg / max_dmg) * 100,
+                100
             )
 
             html += f"""
-        <div class="threshold-row">
+        <div
+            class="threshold-row"
+            title="{compact_number(dmg)}"
+        >
 
             <div class="threshold-track">
+
                 <div
                     class="threshold-fill {color}"
                     style="width:{width:.1f}%"
                 ></div>
+
             </div>
 
-            <span
-                class="{label_class}"
-                style="--fill-end:{width:.1f}%"
-            >
+            <span class="threshold-number">
                 {compact_number(dmg)}
             </span>
 
