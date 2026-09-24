@@ -225,7 +225,6 @@ def generate_html():
 :root {{
     --bg: #0b1120;
     --card: #111827;
-    --card-top: #172033;
     --border: rgba(148, 163, 184, 0.14);
     --muted: #64748b;
     --text: #f8fafc;
@@ -248,8 +247,16 @@ body {{
     padding: 32px;
     min-height: 100vh;
     background:
-        radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
-        radial-gradient(circle at top right, rgba(239, 68, 68, 0.06), transparent 25%),
+        radial-gradient(
+            circle at top left,
+            rgba(59, 130, 246, 0.08),
+            transparent 28%
+        ),
+        radial-gradient(
+            circle at top right,
+            rgba(239, 68, 68, 0.06),
+            transparent 25%
+        ),
         var(--bg);
     color: var(--text);
     font-family:
@@ -377,8 +384,8 @@ h1 {{
 
 /* ---------------------------------------------------------
    Points bar
-   300 points = full half
-   Both sides grow toward center
+   Both sides grow toward the center.
+   300 points = full half.
    --------------------------------------------------------- */
 
 .points-bar {{
@@ -440,7 +447,7 @@ h1 {{
 }}
 
 /* ---------------------------------------------------------
-   Damage bar
+   DAMAGE BAR
    --------------------------------------------------------- */
 
 .damage-wrapper {{
@@ -448,30 +455,28 @@ h1 {{
 }}
 
 .damage-bar {{
+    position: relative;
     display: flex;
     width: 100%;
-    height: 24px;
+    height: 25px;
     overflow: hidden;
     border-radius: 999px;
     background: var(--track);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
 }}
 
-.damage-segment {{
-    min-width: 0;
+/*
+ * The colored fills themselves.
+ */
+.damage-fill {{
+    position: absolute;
+    top: 0;
     height: 100%;
-    display: flex;
-    align-items: center;
-    padding: 0 8px;
-    font-size: 10px;
-    font-weight: 700;
-    color: white;
-    white-space: nowrap;
-    overflow: hidden;
+    z-index: 1;
 }}
 
-.damage-segment.defender {{
-    justify-content: flex-start;
+.damage-fill.defender {{
+    left: 0;
     background: linear-gradient(
         90deg,
         #2563eb,
@@ -479,8 +484,8 @@ h1 {{
     );
 }}
 
-.damage-segment.attacker {{
-    justify-content: flex-end;
+.damage-fill.attacker {{
+    right: 0;
     background: linear-gradient(
         270deg,
         #dc2626,
@@ -488,9 +493,88 @@ h1 {{
     );
 }}
 
-.damage-segment span {{
+/*
+ * Damage labels.
+ *
+ * Normally the label sits outside the colored
+ * portion on the dark unused space.
+ */
+.damage-label {{
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+
+    transform: translateY(-50%);
+
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+
+    white-space: nowrap;
+    pointer-events: none;
+
+    color: #cbd5e1;
+
+    text-shadow:
+        0 1px 2px rgba(0,0,0,0.65);
+}}
+
+/*
+ * Defender label:
+ * Normally positioned just AFTER the blue fill.
+ */
+.damage-label.defender {{
+    left: calc(var(--damage-pct) + 7px);
+}}
+
+/*
+ * Attacker label:
+ * Normally positioned just BEFORE the red fill.
+ */
+.damage-label.attacker {{
+    right: calc(var(--damage-pct) + 7px);
+}}
+
+/*
+ * When there isn't enough unused space,
+ * these fallback labels are placed inside
+ * the colored fill.
+ */
+.damage-label-inside {{
+    position: absolute;
+    top: 50%;
+    z-index: 4;
+
+    transform: translateY(-50%);
+
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+
+    color: white;
+    white-space: nowrap;
+    pointer-events: none;
+
+    text-shadow:
+        0 1px 2px rgba(0,0,0,0.6);
+}}
+
+.damage-label-inside.defender {{
+    left: 8px;
+}}
+
+.damage-label-inside.attacker {{
+    right: 8px;
+}}
+
+/*
+ * For very small colored segments, hide the
+ * inside label and use the outside label.
+ *
+ * For larger segments, show the inside label.
+ */
+.damage-fill-small {{
     overflow: hidden;
-    text-overflow: ellipsis;
 }}
 
 /* ---------------------------------------------------------
@@ -543,10 +627,6 @@ h1 {{
 .green {{
     background: linear-gradient(90deg, #15803d, #22c55e);
 }}
-
-/* ---------------------------------------------------------
-   Footer
-   --------------------------------------------------------- */
 
 .footer {{
     margin-top: 24px;
@@ -620,32 +700,41 @@ h1 {{
         )
 
         # -----------------------------------------------------
-        # Display values
+        # Compact damage values
         # -----------------------------------------------------
 
         defender_damage_display = compact_number(defender_damage)
         attacker_damage_display = compact_number(attacker_damage)
 
         # -----------------------------------------------------
-        # Card content
+        # Decide whether damage labels have enough room
+        #
+        # We use a conservative percentage threshold so that
+        # short values such as 1.2M stay inside the fill when
+        # there is insufficient space outside.
+        # -----------------------------------------------------
+
+        defender_label_inside = defender_damage_pct >= 18
+        attacker_label_inside = attacker_damage_pct >= 18
+
+        # -----------------------------------------------------
+        # Card
         # -----------------------------------------------------
 
         html += f"""
 <div class="card">
 
-    <!-- Region -->
     <h3>{region}</h3>
 
     <div class="region-meta">
         {SIDE.capitalize()}
     </div>
 
-    <!-- Players -->
     <div class="players">
         {battle['participants']:,} players
     </div>
 
-    <!-- Country labels + points -->
+    <!-- Country labels -->
     <div class="side-labels">
 
         <div class="side-label defender">
@@ -667,7 +756,6 @@ h1 {{
     <!-- Points progress -->
     <div class="points-bar">
 
-        <!-- Defender grows LEFT -> CENTER -->
         <div class="points-side">
             <div
                 class="points-fill defender"
@@ -676,7 +764,6 @@ h1 {{
             ></div>
         </div>
 
-        <!-- Attacker grows RIGHT -> CENTER -->
         <div class="points-side">
             <div
                 class="points-fill attacker"
@@ -685,36 +772,65 @@ h1 {{
             ></div>
         </div>
 
-        <!-- Win line -->
         <div class="points-center"></div>
 
     </div>
 
-    <!-- Damage -->
+    <!-- Damage bar -->
     <div class="damage-wrapper">
 
         <div
             class="damage-bar"
-            title="Damage: {defender_damage_display} vs {attacker_damage_display}"
+            title="{defender}: {defender_damage_display} • {attacker}: {attacker_damage_display}"
         >
 
-            <!-- Defender = LEFT -->
+            <!-- Defender fill -->
             <div
-                class="damage-segment defender"
-                style="width:{defender_damage_pct:.1f}%"
-                title="{defender}: {defender_damage_display}"
-            >
-                <span>{defender_damage_display}</span>
-            </div>
+                class="damage-fill defender"
+                style="
+                    width:{defender_damage_pct:.1f}%;
+                    --damage-pct:{defender_damage_pct:.1f}%;
+                "
+            ></div>
 
-            <!-- Attacker = RIGHT -->
+            <!-- Attacker fill -->
             <div
-                class="damage-segment attacker"
-                style="width:{attacker_damage_pct:.1f}%"
-                title="{attacker}: {attacker_damage_display}"
+                class="damage-fill attacker"
+                style="
+                    width:{attacker_damage_pct:.1f}%;
+                    --damage-pct:{attacker_damage_pct:.1f}%;
+                "
+            ></div>
+
+            <!-- Defender label outside the fill -->
+            <span
+                class="damage-label defender {'inside-hidden' if defender_label_inside else ''}"
+                style="--damage-pct:{defender_damage_pct:.1f}%;"
             >
-                <span>{attacker_damage_display}</span>
-            </div>
+                {defender_damage_display}
+            </span>
+
+            <!-- Attacker label outside the fill -->
+            <span
+                class="damage-label attacker {'inside-hidden' if attacker_label_inside else ''}"
+                style="--damage-pct:{attacker_damage_pct:.1f}%;"
+            >
+                {attacker_damage_display}
+            </span>
+
+            <!-- Defender label inside fill when needed -->
+            <span
+                class="damage-label-inside defender {'visible' if defender_label_inside else ''}"
+            >
+                {defender_damage_display}
+            </span>
+
+            <!-- Attacker label inside fill when needed -->
+            <span
+                class="damage-label-inside attacker {'visible' if attacker_label_inside else ''}"
+            >
+                {attacker_damage_display}
+            </span>
 
         </div>
 
@@ -724,9 +840,9 @@ h1 {{
     <div class="thresholds">
 """
 
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
         # Threshold bars
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
 
         max_dmg = max(
             battle["thresholds"].values(),
@@ -741,7 +857,10 @@ h1 {{
             width = (dmg / max_dmg) * 100
 
             html += f"""
-        <div class="bar" title="{compact_number(dmg)}">
+        <div
+            class="bar"
+            title="{compact_number(dmg)}"
+        >
             <div
                 class="fill {color}"
                 style="width:{width:.1f}%"
