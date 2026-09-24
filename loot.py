@@ -173,7 +173,6 @@ def get_loot_threshold(
         "attacker_points": attacker_points,
     })
 
-
 def generate_html():
     from datetime import datetime
     from html import escape
@@ -207,7 +206,10 @@ def generate_html():
             .replace(".0K", "K")
         )
 
+    # ---------------------------------------------------------
     # Order battles by lowest GREEN threshold first
+    # ---------------------------------------------------------
+
     battle_reports.sort(
         key=lambda b: b["thresholds"].get("green", float("inf"))
     )
@@ -216,175 +218,253 @@ def generate_html():
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WarEra Battle Report</title>
 
 <style>
+:root {{
+    --bg: #0b1120;
+    --card: #111827;
+    --card-top: #172033;
+    --border: rgba(148, 163, 184, 0.14);
+    --muted: #64748b;
+    --text: #f8fafc;
+
+    --defender: #3b82f6;
+    --defender-light: #60a5fa;
+
+    --attacker: #ef4444;
+    --attacker-light: #f87171;
+
+    --track: #1e293b;
+}}
+
 * {{
     box-sizing: border-box;
 }}
 
 body {{
-    margin: 24px;
-    background: #0f172a;
-    color: #f8fafc;
-    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    padding: 32px;
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
+        radial-gradient(circle at top right, rgba(239, 68, 68, 0.06), transparent 25%),
+        var(--bg);
+    color: var(--text);
+    font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
 }}
 
 h1 {{
     margin: 0;
-    font-size: 32px;
+    font-size: 30px;
+    font-weight: 750;
+    letter-spacing: -0.5px;
 }}
 
 .subtitle {{
-    color: #94a3b8;
-    margin: 6px 0 22px;
+    color: var(--muted);
+    margin: 6px 0 26px;
+    font-size: 12px;
 }}
 
 .battle-grid {{
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+    align-items: start;
 }}
 
 .card {{
-    background: #111827;
-    border: 1px solid #374151;
-    border-radius: 12px;
-    padding: 14px;
+    position: relative;
+    overflow: hidden;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background:
+        linear-gradient(
+            180deg,
+            rgba(255,255,255,0.025),
+            rgba(255,255,255,0)
+        ),
+        var(--card);
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.20),
+        inset 0 1px 0 rgba(255,255,255,0.02);
+    transition:
+        transform 0.18s ease,
+        border-color 0.18s ease,
+        box-shadow 0.18s ease;
 }}
+
+.card:hover {{
+    transform: translateY(-2px);
+    border-color: rgba(148, 163, 184, 0.25);
+    box-shadow:
+        0 16px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255,255,255,0.03);
+}}
+
+/* ---------------------------------------------------------
+   Region
+   --------------------------------------------------------- */
 
 .card h3 {{
     margin: 0;
-    font-size: 18px;
     text-align: center;
-    font-weight: 700;
+    font-size: 18px;
+    font-weight: 750;
+    letter-spacing: -0.2px;
 }}
 
 .region-meta {{
-    color: #64748b;
-    font-size: 11px;
-    text-align: center;
     margin-top: 3px;
+    text-align: center;
+    color: #475569;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
 }}
 
 .players {{
+    margin: 9px 0 16px;
+    text-align: center;
     color: #64748b;
     font-size: 11px;
-    text-align: center;
-    margin: 8px 0 10px;
 }}
 
-/* -----------------------------------------
-   Country labels
-   Defender = LEFT
-   Attacker = RIGHT
-   ----------------------------------------- */
+/* ---------------------------------------------------------
+   Country headings
+   --------------------------------------------------------- */
 
 .side-labels {{
     display: flex;
     width: 100%;
-    margin-bottom: 5px;
-    font-size: 11px;
-    font-weight: bold;
+    margin-bottom: 6px;
 }}
 
 .side-label {{
     width: 50%;
     min-width: 0;
+    font-size: 12px;
+    font-weight: 700;
 }}
 
 .side-label.defender {{
     text-align: left;
-    color: #60a5fa;
+    color: var(--defender-light);
 }}
 
 .side-label.attacker {{
     text-align: right;
-    color: #f87171;
+    color: var(--attacker-light);
 }}
 
-.side-label span {{
-    color: #94a3b8;
-    font-weight: normal;
+.points-count {{
+    display: inline-block;
     margin-left: 4px;
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 500;
 }}
 
-/* -----------------------------------------
-   Points progress bar
-   Both sides grow toward the center.
-   300 points = full half.
-   ----------------------------------------- */
+/* ---------------------------------------------------------
+   Points bar
+   300 points = full half
+   Both sides grow toward center
+   --------------------------------------------------------- */
 
 .points-bar {{
     position: relative;
-    width: 100%;
-    height: 10px;
     display: flex;
+    width: 100%;
+    height: 9px;
     overflow: hidden;
-    border-radius: 5px;
-    background: #1f2937;
-    margin-bottom: 10px;
+    border-radius: 999px;
+    background: #1e293b;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
 }}
 
 .points-side {{
     position: relative;
     width: 50%;
     height: 100%;
-    background: #1f2937;
+    background: rgba(30, 41, 59, 0.75);
 }}
 
 .points-fill {{
     position: absolute;
     top: 0;
     height: 100%;
+    border-radius: 999px;
 }}
 
 .points-fill.defender {{
     left: 0;
-    background: #2563eb;
+    background: linear-gradient(
+        90deg,
+        #2563eb,
+        #60a5fa
+    );
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
 }}
 
 .points-fill.attacker {{
     right: 0;
-    background: #dc2626;
+    background: linear-gradient(
+        270deg,
+        #dc2626,
+        #f87171
+    );
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.22);
 }}
 
 .points-center {{
     position: absolute;
+    top: -2px;
     left: 50%;
-    top: 0;
-    transform: translateX(-50%);
+    z-index: 3;
     width: 2px;
-    height: 100%;
-    background: #f8fafc;
-    opacity: 0.8;
-    z-index: 2;
+    height: calc(100% + 4px);
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.9);
+    box-shadow: 0 0 6px rgba(255,255,255,0.35);
 }}
 
-/* -----------------------------------------
-   Damage comparison bar
-   Defender = LEFT
-   Attacker = RIGHT
-   ----------------------------------------- */
+/* ---------------------------------------------------------
+   Damage bar
+   --------------------------------------------------------- */
+
+.damage-wrapper {{
+    margin-top: 11px;
+}}
 
 .damage-bar {{
-    width: 100%;
-    height: 22px;
     display: flex;
+    width: 100%;
+    height: 24px;
     overflow: hidden;
-    border-radius: 11px;
-    background: #1f2937;
-    margin-bottom: 10px;
+    border-radius: 999px;
+    background: var(--track);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
 }}
 
 .damage-segment {{
-    height: 100%;
     min-width: 0;
+    height: 100%;
     display: flex;
     align-items: center;
-    padding: 0 7px;
+    padding: 0 8px;
     font-size: 10px;
-    font-weight: bold;
+    font-weight: 700;
     color: white;
     white-space: nowrap;
     overflow: hidden;
@@ -392,12 +472,20 @@ h1 {{
 
 .damage-segment.defender {{
     justify-content: flex-start;
-    background: #2563eb;
+    background: linear-gradient(
+        90deg,
+        #2563eb,
+        #3b82f6
+    );
 }}
 
 .damage-segment.attacker {{
     justify-content: flex-end;
-    background: #dc2626;
+    background: linear-gradient(
+        270deg,
+        #dc2626,
+        #ef4444
+    );
 }}
 
 .damage-segment span {{
@@ -405,17 +493,22 @@ h1 {{
     text-overflow: ellipsis;
 }}
 
-/* -----------------------------------------
+/* ---------------------------------------------------------
    Threshold bars
-   Smaller and only show the number.
-   ----------------------------------------- */
+   --------------------------------------------------------- */
+
+.thresholds {{
+    margin-top: 13px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+}}
 
 .bar {{
-    height: 14px;
-    background: #1f2937;
-    border-radius: 7px;
+    height: 11px;
+    margin: 5px 0;
     overflow: hidden;
-    margin: 4px 0;
+    border-radius: 999px;
+    background: #1a2434;
 }}
 
 .fill {{
@@ -424,37 +517,42 @@ h1 {{
     align-items: center;
     justify-content: flex-end;
     padding: 0 6px;
-    font-size: 9px;
-    font-weight: bold;
+    border-radius: 999px;
+    font-size: 8px;
+    font-weight: 700;
     color: white;
 }}
 
 .red {{
-    background: #dc2626;
+    background: linear-gradient(90deg, #b91c1c, #ef4444);
 }}
 
 .gold {{
-    background: #eab308;
+    background: linear-gradient(90deg, #ca8a04, #eab308);
     color: #111827;
 }}
 
 .purple {{
-    background: #9333ea;
+    background: linear-gradient(90deg, #7e22ce, #a855f7);
 }}
 
 .blue {{
-    background: #2563eb;
+    background: linear-gradient(90deg, #1d4ed8, #3b82f6);
 }}
 
 .green {{
-    background: #16a34a;
+    background: linear-gradient(90deg, #15803d, #22c55e);
 }}
 
+/* ---------------------------------------------------------
+   Footer
+   --------------------------------------------------------- */
+
 .footer {{
-    margin-top: 20px;
+    margin-top: 24px;
     text-align: center;
-    color: #64748b;
-    font-size: 12px;
+    color: #475569;
+    font-size: 11px;
 }}
 </style>
 </head>
@@ -464,11 +562,16 @@ h1 {{
 <h1>⚔ WarEra Battle Report</h1>
 
 <div class="subtitle">
-    Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
+    Generated {datetime.now():%Y-%m-%d %H:%M}
+    • Ordered by lowest GREEN threshold
 </div>
 
 <div class="battle-grid">
 """
+
+    # ---------------------------------------------------------
+    # Battle cards
+    # ---------------------------------------------------------
 
     for battle in battle_reports:
 
@@ -482,9 +585,9 @@ h1 {{
         defender_points = battle.get("defender_points", 0) or 0
         attacker_points = battle.get("attacker_points", 0) or 0
 
-        # -----------------------------------------
+        # -----------------------------------------------------
         # Damage percentages
-        # -----------------------------------------
+        # -----------------------------------------------------
 
         total_damage = defender_damage + attacker_damage
 
@@ -500,9 +603,9 @@ h1 {{
             defender_damage_pct = 50
             attacker_damage_pct = 50
 
-        # -----------------------------------------
+        # -----------------------------------------------------
         # Points progress toward 300
-        # -----------------------------------------
+        # -----------------------------------------------------
 
         points_goal = 300
 
@@ -516,52 +619,55 @@ h1 {{
             100
         )
 
-        # -----------------------------------------
-        # Compact damage values
-        # -----------------------------------------
+        # -----------------------------------------------------
+        # Display values
+        # -----------------------------------------------------
 
         defender_damage_display = compact_number(defender_damage)
         attacker_damage_display = compact_number(attacker_damage)
-        total_damage_display = compact_number(total_damage)
 
-        # -----------------------------------------
-        # Card
-        # -----------------------------------------
+        # -----------------------------------------------------
+        # Card content
+        # -----------------------------------------------------
 
         html += f"""
 <div class="card">
 
-    <!-- Region headline -->
+    <!-- Region -->
     <h3>{region}</h3>
 
     <div class="region-meta">
         {SIDE.capitalize()}
     </div>
 
-    <!-- Player count -->
+    <!-- Players -->
     <div class="players">
         {battle['participants']:,} players
     </div>
 
-    <!-- Countries -->
+    <!-- Country labels + points -->
     <div class="side-labels">
 
         <div class="side-label defender">
             {defender}
-            <span>{defender_points:,}/{points_goal}</span>
+            <span class="points-count">
+                {defender_points:,}/{points_goal}
+            </span>
         </div>
 
         <div class="side-label attacker">
+            <span class="points-count">
+                {attacker_points:,}/{points_goal}
+            </span>
             {attacker}
-            <span>{attacker_points:,}/{points_goal}</span>
         </div>
 
     </div>
 
-    <!-- Points progress bar -->
+    <!-- Points progress -->
     <div class="points-bar">
 
-        <!-- Defender: LEFT -> CENTER -->
+        <!-- Defender grows LEFT -> CENTER -->
         <div class="points-side">
             <div
                 class="points-fill defender"
@@ -570,7 +676,7 @@ h1 {{
             ></div>
         </div>
 
-        <!-- Attacker: RIGHT -> CENTER -->
+        <!-- Attacker grows RIGHT -> CENTER -->
         <div class="points-side">
             <div
                 class="points-fill attacker"
@@ -579,41 +685,48 @@ h1 {{
             ></div>
         </div>
 
-        <!-- Center / win line -->
+        <!-- Win line -->
         <div class="points-center"></div>
 
     </div>
 
-    <!-- Damage comparison -->
-    <div
-        class="damage-bar"
-        title="Total damage: {total_damage_display}"
-    >
+    <!-- Damage -->
+    <div class="damage-wrapper">
 
-        <!-- Defender: always LEFT -->
         <div
-            class="damage-segment defender"
-            style="width:{defender_damage_pct:.1f}%"
-            title="{defender}: {defender_damage_display}"
+            class="damage-bar"
+            title="Damage: {defender_damage_display} vs {attacker_damage_display}"
         >
-            <span>{defender_damage_display}</span>
-        </div>
 
-        <!-- Attacker: always RIGHT -->
-        <div
-            class="damage-segment attacker"
-            style="width:{attacker_damage_pct:.1f}%"
-            title="{attacker}: {attacker_damage_display}"
-        >
-            <span>{attacker_damage_display}</span>
+            <!-- Defender = LEFT -->
+            <div
+                class="damage-segment defender"
+                style="width:{defender_damage_pct:.1f}%"
+                title="{defender}: {defender_damage_display}"
+            >
+                <span>{defender_damage_display}</span>
+            </div>
+
+            <!-- Attacker = RIGHT -->
+            <div
+                class="damage-segment attacker"
+                style="width:{attacker_damage_pct:.1f}%"
+                title="{attacker}: {attacker_damage_display}"
+            >
+                <span>{attacker_damage_display}</span>
+            </div>
+
         </div>
 
     </div>
+
+    <!-- Thresholds -->
+    <div class="thresholds">
 """
 
-        # -----------------------------------------
+        # -----------------------------------------------------
         # Threshold bars
-        # -----------------------------------------
+        # -----------------------------------------------------
 
         max_dmg = max(
             battle["thresholds"].values(),
@@ -628,19 +741,25 @@ h1 {{
             width = (dmg / max_dmg) * 100
 
             html += f"""
-    <div class="bar">
-        <div
-            class="fill {color}"
-            style="width:{width:.1f}%"
-        >
-            <span>{compact_number(dmg)}</span>
+        <div class="bar" title="{compact_number(dmg)}">
+            <div
+                class="fill {color}"
+                style="width:{width:.1f}%"
+            >
+                <span>{compact_number(dmg)}</span>
+            </div>
         </div>
-    </div>
 """
 
         html += """
+    </div>
+
 </div>
 """
+
+    # ---------------------------------------------------------
+    # Footer
+    # ---------------------------------------------------------
 
     html += f"""
 </div>
