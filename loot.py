@@ -87,59 +87,34 @@ def get_all_battles():
     for battle in battles_info:
         region = regions[battle['defender']['region']]
         defender_country = countries[battle['defender']['country']]
+        defender_damages = battle['currentRound']['defender']['damages'] or 0
+        defender_points = battle['currentRound']['defender']['points'] or 0
         attacker_country = countries[battle['attacker']['country']]
+        attacker_damages = battle['currentRound']['attacker']['damages'] or 0
+        attacker_points = battle['currentRound']['attacker']['points'] or 0
         current_round_id = battle['currentRound']['_id']
-        get_loot_threshold(round_id=current_round_id, region=region, defender_country=defender_country, attacker_country=attacker_country)
-
-
-
-def get_loot_threshold_1(round_id: str, region: str, defender_country: str, attacker_country: str):
-    payload = {"roundId": round_id, "dataType": "damage", "type": "user", "side": SIDE, "limit": 100}
-    loot_item, threshold_damage = None, None
-    thresholds = {}
-    while True:
-        r = requests.post(
-            f"{API_BASE}/battleRanking.getRanking",
-            headers=HEADERS,
-            json=payload,
-            timeout=30
+        get_loot_threshold(
+            round_id=current_round_id,
+            region=region,
+            defender_country=defender_country,
+            defender_damages=defender_damages,
+            defender_points=defender_points,
+            attacker_country=attacker_country,
+            attacker_damages=attacker_damages,
+            attacker_points=attacker_points,
         )
-        res = r.json()['result']['data']
-        total_participants = res['itemCount']
-        warriors = res['items']
-        last_rank = None
-        if not warriors:
-            break
-        for warrior in warriors:
-            if not warrior.get('lootItem'):
-                break
-            threshold_damage = warrior['value']
-            last_rank = warrior['rank']
-            threshold = WEAPONS[warrior['lootItem']['code']] if warrior['lootItem']['code'] in WEAPONS else int(warrior['lootItem']['code'][-1:])
-            thresholds[threshold] = threshold_damage
-        if threshold_damage != warriors[-1]['value'] or not res.get('nextCursor'):
-            break
-        else:
-            payload['cursor'] = res['nextCursor']
-    print("\n" + "=" * 46)
-    print("           LOOT THRESHOLD")
-    print("=" * 46)
-    print(f"Region    : {region}")
-    print(f"------- {attacker_country} VS {defender_country} -------")
-    print(f"Side             : {SIDE.capitalize()}")
-    print("-" * 46)
-    print(f"Participants     : {total_participants:,}")
-    print("-" * 46)
-    print(f"Threshold Damage : {threshold_damage:,} at rank {last_rank}")
-    print(f"Need At Least    : {threshold_damage + 1:,}")
-    print(f"All thresholds   :")
-    for threshold, dmg in reversed(list(thresholds.items())):
-        print(' ' * 4, f"{THRESHOLDS[threshold]} : {dmg:,}")
-    print("=" * 46 + "\n")
 
 
-
-def get_loot_threshold(round_id, region, defender_country, attacker_country):
+def get_loot_threshold(
+    round_id: str,
+    region: str,
+    defender_country: str,
+    defender_damages: int,
+    defender_points: int,
+    attacker_country: str,
+    attacker_damages: int,
+    attacker_points: int,
+):
     payload = {
         "roundId": round_id,
         "dataType": "damage",
@@ -192,11 +167,14 @@ def get_loot_threshold(round_id, region, defender_country, attacker_country):
         "rank": last_rank,
         "need": threshold_damage + 1,
         "thresholds": thresholds,
+        "defender_damages": defender_damages,
+        "defender_points": defender_points,
+        "attacker_damages": attacker_damages,
+        "attacker_points": attacker_points,
     })
-
-
 def generate_html():
     from datetime import datetime
+    from html import escape
 
     # Order battles by lowest GREEN threshold first
     battle_reports.sort(
@@ -279,6 +257,58 @@ h1 {{
     font-size: 16px;
 }}
 
+/* Damage / points comparison section */
+.comparison {{
+    margin: 10px 0 14px;
+}}
+
+.comparison-title {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+    color: #9ca3af;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}}
+
+.comparison-bar {{
+    width: 100%;
+    height: 24px;
+    display: flex;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #1f2937;
+}}
+
+.comparison-segment {{
+    height: 100%;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    white-space: nowrap;
+}}
+
+.comparison-segment.defender {{
+    justify-content: flex-start;
+    background: #2563eb;
+}}
+
+.comparison-segment.attacker {{
+    justify-content: flex-end;
+    background: #dc2626;
+}}
+
+.comparison-segment span {{
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+
 .bar {{
     height: 18px;
     background: #1f2937;
@@ -323,10 +353,37 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
 """
 
     for battle in battle_reports:
+        attacker = escape(str(battle["attacker"]))
+        defender = escape(str(battle["defender"]))
+        region = escape(str(battle["region"]))
+
+        defender_damage = battle.get("defender_damages", 0) or 0
+        attacker_damage = battle.get("attacker_damages", 0) or 0
+
+        defender_points = battle.get("defender_points", 0) or 0
+        attacker_points = battle.get("attacker_points", 0) or 0
+
+        # Calculate percentages for split bars
+        total_damage = defender_damage + attacker_damage
+        if total_damage > 0:
+            defender_damage_pct = defender_damage / total_damage * 100
+            attacker_damage_pct = attacker_damage / total_damage * 100
+        else:
+            defender_damage_pct = 50
+            attacker_damage_pct = 50
+
+        total_points = defender_points + attacker_points
+        if total_points > 0:
+            defender_points_pct = defender_points / total_points * 100
+            attacker_points_pct = attacker_points / total_points * 100
+        else:
+            defender_points_pct = 50
+            attacker_points_pct = 50
+
         html += f"""
 <div class="card">
-    <h3>{battle['attacker']} vs {battle['defender']}</h3>
-    <div class="region">📍 {battle['region']} • {SIDE.capitalize()}</div>
+    <h3>{attacker} vs {defender}</h3>
+    <div class="region">📍 {region} • {SIDE.capitalize()}</div>
 
     <div class="info">
         <div class="metric">
@@ -342,6 +399,58 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
             <b style="color:#4ade80;">{battle['need']:,}</b>
         </div>
     </div>
+
+    <!-- DAMAGE -->
+    <div class="comparison">
+        <div class="comparison-title">
+            <span>Damage</span>
+            <span>{defender_damage + attacker_damage:,} total</span>
+        </div>
+
+        <div class="comparison-bar">
+            <div
+                class="comparison-segment defender"
+                style="width:{defender_damage_pct:.1f}%"
+                title="{defender}: {defender_damage:,}"
+            >
+                <span>{defender} {defender_damage:,}</span>
+            </div>
+
+            <div
+                class="comparison-segment attacker"
+                style="width:{attacker_damage_pct:.1f}%"
+                title="{attacker}: {attacker_damage:,}"
+            >
+                <span>{attacker} {attacker_damage:,}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- POINTS -->
+    <div class="comparison">
+        <div class="comparison-title">
+            <span>Points</span>
+            <span>{defender_points + attacker_points:,} total</span>
+        </div>
+
+        <div class="comparison-bar">
+            <div
+                class="comparison-segment defender"
+                style="width:{defender_points_pct:.1f}%"
+                title="{defender}: {defender_points:,}"
+            >
+                <span>{defender} {defender_points:,}</span>
+            </div>
+
+            <div
+                class="comparison-segment attacker"
+                style="width:{attacker_points_pct:.1f}%"
+                title="{attacker}: {attacker_points:,}"
+            >
+                <span>{attacker} {attacker_points:,}</span>
+            </div>
+        </div>
+    </div>
 """
 
         max_dmg = max(battle["thresholds"].values(), default=1)
@@ -352,6 +461,7 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
             reverse=True
         ):
             width = (dmg / max_dmg) * 100
+
             html += f"""
     <div class="bar">
         <div class="fill {color}" style="width:{width:.1f}%">
@@ -361,7 +471,9 @@ Generated {datetime.now():%Y-%m-%d %H:%M} • Ordered by lowest GREEN threshold
     </div>
 """
 
-        html += "</div>"
+        html += """
+</div>
+"""
 
     html += f"""
 </div>
