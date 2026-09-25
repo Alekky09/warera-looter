@@ -1,10 +1,12 @@
 import requests
 import os
+from datetime import datetime
+from html import escape
 
 
 API_BASE = "https://api2.warera.io/trpc"
 
-API_TOKEN = os.environ.get("API_TOKEN")
+API_TOKEN = "wae_4fbd0f569543a02f95c7a69879ba3dce948ab9c291ec75ace367379759788610"
 if not API_TOKEN:
     raise ValueError("API key missing from environment variables.")
 
@@ -124,6 +126,7 @@ def get_loot_threshold(
         "roundId": round_id,
         "dataType": "damage",
         "type": "user",
+        "side": "merged",
         "limit": 100,
     }
 
@@ -168,6 +171,7 @@ def get_loot_threshold(
         "battleId": battle_id,
         "dataType": "damage",
         "type": "user",
+        "side": "merged",
         "limit": 100,
     }
     overall_thresholds = {}
@@ -219,17 +223,9 @@ def get_loot_threshold(
         "round_number": round_number,
     })
 
+
 def generate_html():
     def compact_number(value):
-        """
-        Format large numbers:
-        999            -> 999
-        1,200          -> 1.2K
-        25,000         -> 25K
-        1,000,000      -> 1M
-        2,400,000      -> 2.4M
-        1,500,000,000  -> 1.5B
-        """
         value = float(value)
         abs_value = abs(value)
 
@@ -242,12 +238,7 @@ def generate_html():
         else:
             return f"{int(value):,}"
 
-        return (
-            result
-            .replace(".0B", "B")
-            .replace(".0M", "M")
-            .replace(".0K", "K")
-        )
+        return result.replace(".0B", "B").replace(".0M", "M").replace(".0K", "K")
 
     # Order battles by lowest GREEN threshold first
     battle_reports.sort(
@@ -262,186 +253,169 @@ def generate_html():
 <title>WarEra Battle Report</title>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 :root {{
-    --bg: #0b1120;
-    --card: #111827;
-    --border: rgba(148, 163, 184, 0.14);
-    --muted: #64748b;
-    --text: #f8fafc;
+    --bg-base: #020617;
+    --card-bg: rgba(15, 23, 42, 0.6);
+    --card-border: rgba(255, 255, 255, 0.06);
+    --card-hover: rgba(255, 255, 255, 0.12);
+    
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-dark: #475569;
 
     --defender: #3b82f6;
-    --defender-light: #60a5fa;
-
+    --defender-light: #93c5fd;
     --attacker: #ef4444;
-    --attacker-light: #f87171;
-
-    --track: #1e293b;
+    --attacker-light: #fca5a5;
 }}
 
-* {{
-    box-sizing: border-box;
-}}
+* {{ box-sizing: border-box; }}
 
 body {{
     margin: 0;
-    padding: 32px;
+    padding: 40px 24px;
     min-height: 100vh;
-    background:
-        radial-gradient(
-            circle at top left,
-            rgba(59, 130, 246, 0.08),
-            transparent 28%
-        ),
-        radial-gradient(
-            circle at top right,
-            rgba(239, 68, 68, 0.06),
-            transparent 25%
-        ),
-        var(--bg);
-    color: var(--text);
-    font-family:
-        Inter,
-        ui-sans-serif,
-        system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        sans-serif;
+    background-color: var(--bg-base);
+    background-image: 
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.04), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(239, 68, 68, 0.04), transparent 25%);
+    background-attachment: fixed;
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}}
+
+.header-container {{
+    text-align: center;
+    margin-bottom: 48px;
 }}
 
 h1 {{
     margin: 0;
-    font-size: 30px;
-    font-weight: 750;
-    letter-spacing: -0.5px;
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }}
 
 .subtitle {{
-    color: var(--muted);
-    margin: 6px 0 26px;
-    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+}}
+
+.badge-tag {{
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }}
 
 .battle-grid {{
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 18px;
-    align-items: start;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
 }}
 
 .card {{
     position: relative;
-    overflow: hidden;
-    padding: 18px;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    background:
-        linear-gradient(
-            180deg,
-            rgba(255,255,255,0.025),
-            rgba(255,255,255,0)
-        ),
-        var(--card);
-    box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.20),
-        inset 0 1px 0 rgba(255,255,255,0.02);
-    transition:
-        transform 0.18s ease,
-        border-color 0.18s ease,
-        box-shadow 0.18s ease;
+    padding: 24px;
+    border-radius: 20px;
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }}
 
 .card:hover {{
-    transform: translateY(-2px);
-    border-color: rgba(148, 163, 184, 0.25);
-    box-shadow:
-        0 16px 36px rgba(0, 0, 0, 0.28),
-        inset 0 1px 0 rgba(255,255,255,0.03);
+    transform: translateY(-4px);
+    border-color: var(--card-hover);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
 }}
 
-/* ---------------------------------------------------------
-   Region
-   --------------------------------------------------------- */
+.card-header {{
+    text-align: center;
+    margin-bottom: 20px;
+}}
 
 .card h3 {{
-    margin: 0;
-    text-align: center;
-    font-size: 18px;
-    font-weight: 750;
-    letter-spacing: -0.2px;
+    margin: 0 0 6px 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
 }}
 
 .region-meta {{
-    margin-top: 3px;
-    text-align: center;
-    color: #475569;
-    font-size: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.9px;
+    letter-spacing: 1px;
 }}
 
-.players {{
-    margin: 9px 0 16px;
-    text-align: center;
-    color: #64748b;
-    font-size: 11px;
+.region-meta span.dot {{
+    width: 4px; height: 4px;
+    background: var(--text-dark);
+    border-radius: 50%;
 }}
 
 /* ---------------------------------------------------------
-   Country headings
+   Battle Stats
    --------------------------------------------------------- */
-
 .side-labels {{
     display: flex;
-    width: 100%;
-    margin-bottom: 6px;
+    justify-content: space-between;
+    margin-bottom: 8px;
 }}
 
 .side-label {{
-    width: 50%;
-    min-width: 0;
-    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
     font-weight: 700;
 }}
 
-.side-label.defender {{
-    text-align: left;
-    color: var(--defender-light);
-}}
-
-.side-label.attacker {{
-    text-align: right;
-    color: var(--attacker-light);
-}}
+.side-label.defender {{ color: var(--defender-light); align-items: flex-start; }}
+.side-label.attacker {{ color: var(--attacker-light); align-items: flex-end; }}
 
 .points-count {{
-    display: inline-block;
-    margin-left: 4px;
-    color: #94a3b8;
-    font-size: 10px;
-    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 2px;
 }}
 
-/* ---------------------------------------------------------
-   Points progress bar
-   --------------------------------------------------------- */
-
+/* Slimmed down Points Progress */
 .points-bar {{
     position: relative;
     display: flex;
     width: 100%;
-    height: 9px;
-    overflow: hidden;
+    height: 6px;
     border-radius: 999px;
-    background: #1e293b;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    background: #0f172a;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    margin-bottom: 16px;
 }}
 
 .points-side {{
     position: relative;
     width: 50%;
     height: 100%;
-    background: rgba(30, 41, 59, 0.75);
 }}
 
 .points-fill {{
@@ -452,113 +426,111 @@ h1 {{
 }}
 
 .points-fill.defender {{
-    left: 0;
-    background: linear-gradient(90deg, #2563eb, #60a5fa);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+    right: 0; /* Grow towards center from left half */
+    background: linear-gradient(90deg, #1d4ed8, #60a5fa);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
 }}
 
 .points-fill.attacker {{
-    right: 0;
-    background: linear-gradient(270deg, #dc2626, #f87171);
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.22);
+    left: 0; /* Grow towards center from right half */
+    background: linear-gradient(270deg, #b91c1c, #f87171);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }}
 
 .points-center {{
     position: absolute;
-    top: -2px;
+    top: -3px;
     left: 50%;
     z-index: 3;
     width: 2px;
-    height: calc(100% + 4px);
+    height: 12px;
     transform: translateX(-50%);
-    border-radius: 999px;
-    background: rgba(248, 250, 252, 0.9);
-    box-shadow: 0 0 6px rgba(255,255,255,0.35);
+    background: #fff;
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(255,255,255,0.6);
 }}
 
-/* ---------------------------------------------------------
-   Damage comparison bar
-   --------------------------------------------------------- */
-
-.damage-wrapper {{
-    margin-top: 11px;
-}}
-
+/* Refined Damage Bar */
 .damage-bar {{
     display: flex;
     width: 100%;
-    height: 24px;
+    height: 20px;
+    border-radius: 6px;
+    background: #0f172a;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
     overflow: hidden;
-    border-radius: 999px;
-    background: var(--track);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
 }}
 
 .damage-segment {{
-    min-width: 0;
-    height: 100%;
     display: flex;
     align-items: center;
-    padding: 0 8px;
-    font-size: 10px;
+    padding: 0 10px;
+    font-size: 11px;
     font-weight: 700;
     color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     white-space: nowrap;
     overflow: hidden;
 }}
 
 .damage-segment.defender {{
     justify-content: flex-start;
-    background: linear-gradient(90deg, #2563eb, #3b82f6);
+    background: linear-gradient(90deg, #1e3a8a, #2563eb);
+    border-right: 1px solid rgba(0,0,0,0.3);
 }}
 
 .damage-segment.attacker {{
     justify-content: flex-end;
-    background: linear-gradient(270deg, #dc2626, #ef4444);
-}}
-
-.damage-segment span {{
-    overflow: hidden;
-    text-overflow: ellipsis;
+    background: linear-gradient(270deg, #7f1d1d, #dc2626);
+    border-left: 1px solid rgba(255,255,255,0.1);
 }}
 
 /* ---------------------------------------------------------
-   Threshold bars
+   Threshold Section (Inset style)
    --------------------------------------------------------- */
-
-.thresholds {{
-    margin-top: 15px;
-    padding-top: 13px;
-    border-top: 1px solid rgba(148, 163, 184, 0.08);
+.thresholds-container {{
+    margin-top: 24px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.03);
 }}
 
 .threshold-title {{
     font-size: 10px;
     font-weight: 700;
-    color: #94a3b8;
+    color: var(--text-dark);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 12px 0 6px;
+    letter-spacing: 0.8px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}}
+.threshold-title::after {{
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.05);
 }}
 
-.thresholds > .threshold-title:first-child {{
-    margin-top: 0;
+.threshold-title:not(:first-child) {{
+    margin-top: 20px;
 }}
 
 .threshold-row {{
     position: relative;
     width: 100%;
-    height: 16px;
-    margin: 6px 0;
+    height: 10px; /* Slimmer */
+    margin: 10px 0;
 }}
 
 .threshold-track {{
     position: absolute;
     inset: 0;
-    overflow: hidden;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(30, 41, 59, 0.95), rgba(24, 33, 48, 0.95));
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255,255,255,0.025);
+    background: #0f172a;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
 }}
 
 .threshold-fill {{
@@ -567,73 +539,48 @@ h1 {{
     left: 0;
     height: 100%;
     border-radius: 999px;
-    transition: width 0.2s ease;
 }}
 
-.threshold-fill.red {{
-    background: linear-gradient(90deg, #991b1b, #dc2626, #f87171);
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.30);
-}}
-.threshold-fill.gold {{
-    background: linear-gradient(90deg, #a16207, #eab308, #fde047);
-    box-shadow: 0 0 10px rgba(234, 179, 8, 0.28);
-}}
-.threshold-fill.purple {{
-    background: linear-gradient(90deg, #6b21a8, #9333ea, #c084fc);
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.28);
-}}
-.threshold-fill.blue {{
-    background: linear-gradient(90deg, #1d4ed8, #2563eb, #60a5fa);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.28);
-}}
-.threshold-fill.green {{
-    background: linear-gradient(90deg, #166534, #16a34a, #4ade80);
-    box-shadow: 0 0 10px rgba(34, 197, 94, 0.28);
-}}
+.threshold-fill.red {{ background: linear-gradient(90deg, #991b1b, #f87171); box-shadow: 0 0 8px rgba(239,68,68,0.3); }}
+.threshold-fill.gold {{ background: linear-gradient(90deg, #a16207, #fde047); box-shadow: 0 0 8px rgba(234,179,8,0.3); }}
+.threshold-fill.purple {{ background: linear-gradient(90deg, #6b21a8, #c084fc); box-shadow: 0 0 8px rgba(168,85,247,0.3); }}
+.threshold-fill.blue {{ background: linear-gradient(90deg, #1e40af, #60a5fa); box-shadow: 0 0 8px rgba(59,130,246,0.3); }}
+.threshold-fill.green {{ background: linear-gradient(90deg, #166534, #4ade80); box-shadow: 0 0 8px rgba(34,197,94,0.3); }}
 
 .threshold-number {{
     position: absolute;
     top: 50%;
-    right: 6px;
+    right: 0;
+    transform: translateY(-50%) translateX(20%); /* Slight overhang */
     z-index: 5;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    min-height: 14px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(9, 15, 27, 0.72);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: #1e293b;
+    border: 1px solid rgba(255,255,255,0.1);
     color: #f8fafc;
-    font-size: 9px;
-    line-height: 1;
-    font-weight: 750;
-    letter-spacing: 0.1px;
-    white-space: nowrap;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
-    backdrop-filter: blur(4px);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }}
 
-/* ---------------------------------------------------------
-   Footer
-   --------------------------------------------------------- */
-
 .footer {{
-    margin-top: 24px;
+    margin-top: 48px;
     text-align: center;
-    color: #475569;
-    font-size: 11px;
+    color: var(--text-dark);
+    font-size: 12px;
+    font-weight: 500;
 }}
 </style>
 </head>
 
 <body>
 
-<h1>⚔ WarEra Battle Report</h1>
-
-<div class="subtitle">
-    Generated {datetime.now():%Y-%m-%d %H:%M}
-    • Ordered by lowest GREEN threshold
+<div class="header-container">
+    <h1>WarEra Battle Report</h1>
+    <div class="subtitle">
+        <span>Generated {datetime.now():%Y-%m-%d %H:%M}</span>
+        <span class="badge-tag">Ordered by lowest GREEN threshold</span>
+    </div>
 </div>
 
 <div class="battle-grid">
@@ -688,73 +635,51 @@ h1 {{
         html += f"""
 <div class="card">
 
-    <h3>{region}</h3>
-
-    <div class="region-meta">
-        ROUND {round_num}
-    </div>
-
-    <div class="players">
-        {battle['participants']:,} players
+    <div class="card-header">
+        <h3>{region}</h3>
+        <div class="region-meta">
+            ROUND {round_num} <span class="dot"></span> {battle['participants']:,} PLAYERS
+        </div>
     </div>
 
     <!-- Country labels -->
     <div class="side-labels">
         <div class="side-label defender">
             {defender}
-            <span class="points-count">
-                {defender_points:,}/{points_goal}
-            </span>
+            <span class="points-count">{defender_points:,} / {points_goal} PTS</span>
         </div>
-
         <div class="side-label attacker">
-            <span class="points-count">
-                {attacker_points:,}/{points_goal}
-            </span>
             {attacker}
+            <span class="points-count">{attacker_points:,} / {points_goal} PTS</span>
         </div>
     </div>
 
     <!-- Points progress -->
     <div class="points-bar">
         <div class="points-side">
-            <div
-                class="points-fill defender"
-                style="width:{defender_points_pct:.1f}%"
-                title="{defender}: {defender_points:,} / {points_goal}"
-            ></div>
+            <div class="points-fill defender" style="width:{defender_points_pct:.1f}%; right: 0; left: auto;" title="{defender}: {defender_points:,}"></div>
         </div>
-
         <div class="points-side">
-            <div
-                class="points-fill attacker"
-                style="width:{attacker_points_pct:.1f}%"
-                title="{attacker}: {attacker_points:,} / {points_goal}"
-            ></div>
+            <div class="points-fill attacker" style="width:{attacker_points_pct:.1f}%; left: 0; right: auto;" title="{attacker}: {attacker_points:,}"></div>
         </div>
-
         <div class="points-center"></div>
     </div>
 
     <!-- Damage -->
-    <div class="damage-wrapper">
-        <div class="damage-bar" title="{defender}: {defender_damage_display} • {attacker}: {attacker_damage_display}">
-            <div class="damage-segment defender" style="width:{defender_damage_pct:.1f}%" title="{defender}: {defender_damage_display}">
-                <span>{defender_damage_display}</span>
-            </div>
-            <div class="damage-segment attacker" style="width:{attacker_damage_pct:.1f}%" title="{attacker}: {attacker_damage_display}">
-                <span>{attacker_damage_display}</span>
-            </div>
+    <div class="damage-bar" title="{defender}: {defender_damage_display} • {attacker}: {attacker_damage_display}">
+        <div class="damage-segment defender" style="width:{defender_damage_pct:.1f}%">
+            <span>{defender_damage_display}</span>
+        </div>
+        <div class="damage-segment attacker" style="width:{attacker_damage_pct:.1f}%">
+            <span>{attacker_damage_display}</span>
         </div>
     </div>
 
-    <!-- Thresholds -->
-    <div class="thresholds">
+    <!-- Thresholds Inset -->
+    <div class="thresholds-container">
 """
-        # Append generated bars for current round
         html += generate_threshold_bars_html(battle["thresholds"], f"Round {round_num} Loot")
         
-        # Append generated bars for overall battle (if any)
         if battle.get("overall_thresholds"):
             html += generate_threshold_bars_html(battle["overall_thresholds"], "Overall Battle Loot")
 
@@ -767,7 +692,7 @@ h1 {{
 </div>
 
 <div class="footer">
-    {len(battle_reports)} active battles
+    {len(battle_reports)} active battles being tracked
 </div>
 
 </body>
