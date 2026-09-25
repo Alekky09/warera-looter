@@ -13,7 +13,6 @@ HEADERS = {
     "accept": "*/*",
     "Content-Type": "application/json",
 }
-SIDE = "merged"
 WEAPONS = {
     "jet": 6,
     "tank": 5,
@@ -85,6 +84,7 @@ def get_all_battles():
     r.raise_for_status()
     battles_info = r.json()['result']['data']['items']
     for battle in battles_info:
+        battle_id = battle['_id']
         region = regions[battle['defender']['region']]
         defender_country = countries[battle['defender']['country']]
         defender_damages = battle['currentRound']['defender']['damages'] or 0
@@ -93,7 +93,9 @@ def get_all_battles():
         attacker_damages = battle['currentRound']['attacker']['damages'] or 0
         attacker_points = battle['currentRound']['attacker']['points'] or 0
         current_round_id = battle['currentRound']['_id']
+        round_number = len(battle['rounds']) + 1
         get_loot_threshold(
+            battle_id=battle_id,
             round_id=current_round_id,
             region=region,
             defender_country=defender_country,
@@ -102,10 +104,12 @@ def get_all_battles():
             attacker_country=attacker_country,
             attacker_damages=attacker_damages,
             attacker_points=attacker_points,
+            round_number=round_number,
         )
 
 
 def get_loot_threshold(
+    battle_id: str,
     round_id: str,
     region: str,
     defender_country: str,
@@ -114,12 +118,12 @@ def get_loot_threshold(
     attacker_country: str,
     attacker_damages: int,
     attacker_points: int,
+    round_number: int,
 ):
     payload = {
         "roundId": round_id,
         "dataType": "damage",
         "type": "user",
-        "side": SIDE,
         "limit": 100,
     }
 
@@ -128,6 +132,7 @@ def get_loot_threshold(
     participants = 0
     last_rank = 0
 
+    # Get round loot distribution
     while True:
         r = requests.post(
             f"{API_BASE}/battleRanking.getRanking",
@@ -159,6 +164,45 @@ def get_loot_threshold(
 
         payload["cursor"] = res["nextCursor"]
 
+    payload = {
+        "battleId": battle_id,
+        "dataType": "damage",
+        "type": "user",
+        "limit": 100,
+    }
+    overall_thresholds = {}
+    overall_threshold_damage = 0
+    # Get overall battle loot distribution
+    while True:
+        r = requests.post(
+            f"{API_BASE}/battleRanking.getRanking",
+            headers=HEADERS,
+            json=payload,
+            timeout=30,
+        )
+
+        res = r.json()["result"]["data"]
+        participants = res["itemCount"]
+        warriors = res["items"]
+
+        if not warriors:
+            break
+
+        for w in warriors:
+            if not w.get("lootItem"):
+                break
+
+            overall_threshold_damage = w["value"]
+
+            code = w["lootItem"]["code"]
+            tier = WEAPONS.get(code) if code in WEAPONS else int(code[-1:])
+            overall_thresholds[THRESHOLDS[tier]] = overall_threshold_damage
+
+        if overall_threshold_damage != warriors[-1]["value"] or not res.get("nextCursor"):
+            break
+
+        payload["cursor"] = res["nextCursor"]
+
     battle_reports.append({
         "region": region,
         "attacker": attacker_country,
@@ -171,13 +215,11 @@ def get_loot_threshold(
         "defender_points": defender_points,
         "attacker_damages": attacker_damages,
         "attacker_points": attacker_points,
+        "overall_thresholds": overall_thresholds,
+        "round_number": round_number,
     })
 
-
 def generate_html():
-    from datetime import datetime
-    from html import escape
-
     def compact_number(value):
         """
         Format large numbers:
@@ -382,7 +424,6 @@ h1 {{
 
 /* ---------------------------------------------------------
    Points progress bar
-   Both sides grow toward the center.
    --------------------------------------------------------- */
 
 .points-bar {{
@@ -412,21 +453,13 @@ h1 {{
 
 .points-fill.defender {{
     left: 0;
-    background: linear-gradient(
-        90deg,
-        #2563eb,
-        #60a5fa
-    );
+    background: linear-gradient(90deg, #2563eb, #60a5fa);
     box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
 }}
 
 .points-fill.attacker {{
     right: 0;
-    background: linear-gradient(
-        270deg,
-        #dc2626,
-        #f87171
-    );
+    background: linear-gradient(270deg, #dc2626, #f87171);
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.22);
 }}
 
@@ -445,8 +478,6 @@ h1 {{
 
 /* ---------------------------------------------------------
    Damage comparison bar
-   Defender = left
-   Attacker = right
    --------------------------------------------------------- */
 
 .damage-wrapper {{
@@ -478,20 +509,12 @@ h1 {{
 
 .damage-segment.defender {{
     justify-content: flex-start;
-    background: linear-gradient(
-        90deg,
-        #2563eb,
-        #3b82f6
-    );
+    background: linear-gradient(90deg, #2563eb, #3b82f6);
 }}
 
 .damage-segment.attacker {{
     justify-content: flex-end;
-    background: linear-gradient(
-        270deg,
-        #dc2626,
-        #ef4444
-    );
+    background: linear-gradient(270deg, #dc2626, #ef4444);
 }}
 
 .damage-segment span {{
@@ -501,13 +524,25 @@ h1 {{
 
 /* ---------------------------------------------------------
    Threshold bars
-   Modern compact progress indicators
    --------------------------------------------------------- */
 
 .thresholds {{
     margin-top: 15px;
     padding-top: 13px;
     border-top: 1px solid rgba(148, 163, 184, 0.08);
+}}
+
+.threshold-title {{
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 12px 0 6px;
+}}
+
+.thresholds > .threshold-title:first-child {{
+    margin-top: 0;
 }}
 
 .threshold-row {{
@@ -522,15 +557,8 @@ h1 {{
     inset: 0;
     overflow: hidden;
     border-radius: 999px;
-    background:
-        linear-gradient(
-            90deg,
-            rgba(30, 41, 59, 0.95),
-            rgba(24, 33, 48, 0.95)
-        );
-    box-shadow:
-        inset 0 1px 2px rgba(0, 0, 0, 0.35),
-        inset 0 0 0 1px rgba(255,255,255,0.025);
+    background: linear-gradient(90deg, rgba(30, 41, 59, 0.95), rgba(24, 33, 48, 0.95));
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255,255,255,0.025);
 }}
 
 .threshold-fill {{
@@ -542,74 +570,26 @@ h1 {{
     transition: width 0.2s ease;
 }}
 
-/* Red */
 .threshold-fill.red {{
-    background: linear-gradient(
-        90deg,
-        #991b1b,
-        #dc2626,
-        #f87171
-    );
-    box-shadow:
-        0 0 10px rgba(239, 68, 68, 0.30);
+    background: linear-gradient(90deg, #991b1b, #dc2626, #f87171);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.30);
 }}
-
-/* Gold */
 .threshold-fill.gold {{
-    background: linear-gradient(
-        90deg,
-        #a16207,
-        #eab308,
-        #fde047
-    );
-    box-shadow:
-        0 0 10px rgba(234, 179, 8, 0.28);
+    background: linear-gradient(90deg, #a16207, #eab308, #fde047);
+    box-shadow: 0 0 10px rgba(234, 179, 8, 0.28);
 }}
-
-/* Purple */
 .threshold-fill.purple {{
-    background: linear-gradient(
-        90deg,
-        #6b21a8,
-        #9333ea,
-        #c084fc
-    );
-    box-shadow:
-        0 0 10px rgba(168, 85, 247, 0.28);
+    background: linear-gradient(90deg, #6b21a8, #9333ea, #c084fc);
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.28);
 }}
-
-/* Blue */
 .threshold-fill.blue {{
-    background: linear-gradient(
-        90deg,
-        #1d4ed8,
-        #2563eb,
-        #60a5fa
-    );
-    box-shadow:
-        0 0 10px rgba(59, 130, 246, 0.28);
+    background: linear-gradient(90deg, #1d4ed8, #2563eb, #60a5fa);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.28);
 }}
-
-/* Green */
 .threshold-fill.green {{
-    background: linear-gradient(
-        90deg,
-        #166534,
-        #16a34a,
-        #4ade80
-    );
-    box-shadow:
-        0 0 10px rgba(34, 197, 94, 0.28);
+    background: linear-gradient(90deg, #166534, #16a34a, #4ade80);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.28);
 }}
-
-/*
- * Value badge.
- *
- * Always visible and high contrast.
- * It sits over the right side of the bar so it
- * remains readable even when the colored fill
- * is very short.
- */
 
 .threshold-number {{
     position: absolute;
@@ -617,30 +597,20 @@ h1 {{
     right: 6px;
     z-index: 5;
     transform: translateY(-50%);
-
     display: flex;
     align-items: center;
-
     min-height: 14px;
     padding: 2px 6px;
-
     border-radius: 999px;
-
     background: rgba(9, 15, 27, 0.72);
     border: 1px solid rgba(255,255,255,0.10);
-
     color: #f8fafc;
     font-size: 9px;
     line-height: 1;
     font-weight: 750;
     letter-spacing: 0.1px;
-
     white-space: nowrap;
-
-    box-shadow:
-        0 1px 4px rgba(0,0,0,0.35),
-        inset 0 1px 0 rgba(255,255,255,0.05);
-
+    box-shadow: 0 1px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
     backdrop-filter: blur(4px);
 }}
 
@@ -669,62 +639,51 @@ h1 {{
 <div class="battle-grid">
 """
 
-    for battle in battle_reports:
+    def generate_threshold_bars_html(thresholds_dict, title):
+        if not thresholds_dict:
+            return ""
+            
+        t_html = f'<div class="threshold-title">{title}</div>\n'
+        max_dmg = max(thresholds_dict.values(), default=1)
+        
+        for color, dmg in sorted(thresholds_dict.items(), key=lambda x: x[1], reverse=True):
+            width = min((dmg / max_dmg) * 100, 100)
+            t_html += f"""
+        <div class="threshold-row" title="{compact_number(dmg)}">
+            <div class="threshold-track">
+                <div class="threshold-fill {color}" style="width:{width:.1f}%"></div>
+            </div>
+            <span class="threshold-number">{compact_number(dmg)}</span>
+        </div>
+"""
+        return t_html
 
+    for battle in battle_reports:
         attacker = escape(str(battle["attacker"]))
         defender = escape(str(battle["defender"]))
         region = escape(str(battle["region"]))
+        round_num = battle.get("round_number", 1)
 
         defender_damage = battle.get("defender_damages", 0) or 0
         attacker_damage = battle.get("attacker_damages", 0) or 0
-
         defender_points = battle.get("defender_points", 0) or 0
         attacker_points = battle.get("attacker_points", 0) or 0
-
-        # -----------------------------------------------------
-        # Damage percentages
-        # -----------------------------------------------------
 
         total_damage = defender_damage + attacker_damage
 
         if total_damage > 0:
-            defender_damage_pct = (
-                defender_damage / total_damage
-            ) * 100
-
-            attacker_damage_pct = (
-                attacker_damage / total_damage
-            ) * 100
+            defender_damage_pct = (defender_damage / total_damage) * 100
+            attacker_damage_pct = (attacker_damage / total_damage) * 100
         else:
             defender_damage_pct = 50
             attacker_damage_pct = 50
 
-        # -----------------------------------------------------
-        # Points progress toward 300
-        # -----------------------------------------------------
-
         points_goal = 300
-
-        defender_points_pct = min(
-            max((defender_points / points_goal) * 100, 0),
-            100
-        )
-
-        attacker_points_pct = min(
-            max((attacker_points / points_goal) * 100, 0),
-            100
-        )
-
-        # -----------------------------------------------------
-        # Compact damage values
-        # -----------------------------------------------------
+        defender_points_pct = min(max((defender_points / points_goal) * 100, 0), 100)
+        attacker_points_pct = min(max((attacker_points / points_goal) * 100, 0), 100)
 
         defender_damage_display = compact_number(defender_damage)
         attacker_damage_display = compact_number(attacker_damage)
-
-        # -----------------------------------------------------
-        # Card
-        # -----------------------------------------------------
 
         html += f"""
 <div class="card">
@@ -732,7 +691,7 @@ h1 {{
     <h3>{region}</h3>
 
     <div class="region-meta">
-        {SIDE.capitalize()}
+        ROUND {round_num}
     </div>
 
     <div class="players">
@@ -741,7 +700,6 @@ h1 {{
 
     <!-- Country labels -->
     <div class="side-labels">
-
         <div class="side-label defender">
             {defender}
             <span class="points-count">
@@ -755,13 +713,10 @@ h1 {{
             </span>
             {attacker}
         </div>
-
     </div>
 
     <!-- Points progress -->
     <div class="points-bar">
-
-        <!-- Defender: LEFT -> CENTER -->
         <div class="points-side">
             <div
                 class="points-fill defender"
@@ -770,7 +725,6 @@ h1 {{
             ></div>
         </div>
 
-        <!-- Attacker: RIGHT -> CENTER -->
         <div class="points-side">
             <div
                 class="points-fill attacker"
@@ -780,87 +734,32 @@ h1 {{
         </div>
 
         <div class="points-center"></div>
-
     </div>
 
     <!-- Damage -->
     <div class="damage-wrapper">
-
-        <div
-            class="damage-bar"
-            title="{defender}: {defender_damage_display} • {attacker}: {attacker_damage_display}"
-        >
-
-            <!-- Defender = LEFT -->
-            <div
-                class="damage-segment defender"
-                style="width:{defender_damage_pct:.1f}%"
-                title="{defender}: {defender_damage_display}"
-            >
+        <div class="damage-bar" title="{defender}: {defender_damage_display} • {attacker}: {attacker_damage_display}">
+            <div class="damage-segment defender" style="width:{defender_damage_pct:.1f}%" title="{defender}: {defender_damage_display}">
                 <span>{defender_damage_display}</span>
             </div>
-
-            <!-- Attacker = RIGHT -->
-            <div
-                class="damage-segment attacker"
-                style="width:{attacker_damage_pct:.1f}%"
-                title="{attacker}: {attacker_damage_display}"
-            >
+            <div class="damage-segment attacker" style="width:{attacker_damage_pct:.1f}%" title="{attacker}: {attacker_damage_display}">
                 <span>{attacker_damage_display}</span>
             </div>
-
         </div>
-
     </div>
 
     <!-- Thresholds -->
     <div class="thresholds">
 """
-
-        # -----------------------------------------------------
-        # Threshold bars
-        # -----------------------------------------------------
-
-        max_dmg = max(
-            battle["thresholds"].values(),
-            default=1
-        )
-
-        for color, dmg in sorted(
-            battle["thresholds"].items(),
-            key=lambda x: x[1],
-            reverse=True
-        ):
-            width = min(
-                (dmg / max_dmg) * 100,
-                100
-            )
-
-            html += f"""
-        <div
-            class="threshold-row"
-            title="{compact_number(dmg)}"
-        >
-
-            <div class="threshold-track">
-
-                <div
-                    class="threshold-fill {color}"
-                    style="width:{width:.1f}%"
-                ></div>
-
-            </div>
-
-            <span class="threshold-number">
-                {compact_number(dmg)}
-            </span>
-
-        </div>
-"""
+        # Append generated bars for current round
+        html += generate_threshold_bars_html(battle["thresholds"], f"Round {round_num} Loot")
+        
+        # Append generated bars for overall battle (if any)
+        if battle.get("overall_thresholds"):
+            html += generate_threshold_bars_html(battle["overall_thresholds"], "Overall Battle Loot")
 
         html += """
     </div>
-
 </div>
 """
 
@@ -884,7 +783,4 @@ h1 {{
 get_all_countries()
 get_all_regions()
 get_all_battles()
-battle_reports.sort(
-    key=lambda b: b["thresholds"].get("green", float("inf"))
-)
 generate_html()
