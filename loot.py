@@ -6,7 +6,7 @@ from html import escape
 
 API_BASE = "https://api2.warera.io/trpc"
 
-API_TOKEN = "wae_4fbd0f569543a02f95c7a69879ba3dce948ab9c291ec75ace367379759788610"
+API_TOKEN = os.environ.get("API_TOKEN")
 if not API_TOKEN:
     raise ValueError("API key missing from environment variables.")
 
