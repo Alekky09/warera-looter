@@ -86,6 +86,9 @@ def get_all_battles():
     r.raise_for_status()
     battles_info = r.json()['result']['data']['items']
     for battle in battles_info:
+        # Skip tournaments
+        if battle['type'] == 'tournament':
+            continue
         battle_id = battle['_id']
         region = regions[battle['defender']['region']]
         defender_country = countries[battle['defender']['country']]
