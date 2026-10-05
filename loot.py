@@ -2,6 +2,10 @@ import requests
 import os
 from datetime import datetime
 from html import escape
+import json
+import asyncio
+import aiohttp
+import base64
 
 
 API_BASE = "https://api2.warera.io/trpc"
@@ -44,6 +48,142 @@ COLORS = {
     "blue": "#2563eb",
     "green": "#16a34a",
 }
+
+
+def derive_next_cursor(current_cursor: str, offset_step: int) -> str:
+    """Derives a future cursor by adding offset_step (e.g. 100 * page_offset) to num and str."""
+    if not current_cursor or not current_cursor.startswith("v2."):
+        return current_cursor
+
+    b64_part = current_cursor[3:]
+    # Pad base64 string if necessary
+    padded_b64 = b64_part + "=" * (-len(b64_part) % 4)
+    data = json.loads(base64.urlsafe_b64decode(padded_b64).decode("utf-8"))
+
+    num_val = data[0]["v"] + offset_step
+    hex_str = data[1]["v"]
+    next_hex = hex(int(hex_str, 16) + offset_step)[2:]
+
+    payload = [{"t": "num", "v": num_val}, {"t": "str", "v": next_hex}]
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8").rstrip("=")
+    return f"v2.{encoded}"
+
+
+async def fetch_page(session, path, payload, cursor):
+    """Executes a single POST request with a specific cursor."""
+    req_payload = {**payload, "cursor": cursor} if cursor else payload
+    async with session.post(
+        f"{API_BASE}/{path}",
+        headers=HEADERS,
+        json=req_payload,
+        timeout=aiohttp.ClientTimeout(total=30),
+    ) as resp:
+        res = await resp.json()
+        retval = res["result"]["data"]
+        return retval
+
+
+def process_warriors(warriors, thresholds):
+    """Processes a list of warriors and updates thresholds dictionary."""
+    threshold_damage = None
+    last_rank = None
+
+    for w in warriors:
+        if not w.get("lootItem"):
+            return None, None, True  # Stop flag if lootItem missing
+
+        threshold_damage = w["value"]
+        last_rank = w["rank"]
+
+        code = w["lootItem"]["code"]
+        tier = WEAPONS.get(code) if code in WEAPONS else int(code[-1:])
+        thresholds[THRESHOLDS[tier]] = threshold_damage
+
+    return threshold_damage, last_rank, False
+
+
+async def get_round_loot_distribution(payload, battle_id, round_id, thresholds):
+    path = "battleRanking.getRanking"
+    batch_size = 5
+    page_limit = 100
+
+    participants = 0
+    last_rank = 0
+    threshold_damage = 0
+
+    async with aiohttp.ClientSession() as session:
+        # --- 1. Fetch Page 1 ---
+        page1_data = await fetch_page(session, path, payload, payload.get("cursor"))
+        participants = page1_data.get("itemCount", 0)
+        warriors = page1_data.get("items", [])
+
+        if not warriors:
+            return {
+                "participants": participants,
+                "last_rank": last_rank,
+                "threshold_damage": threshold_damage,
+            }
+
+        threshold_damage, last_rank, stop_early = process_warriors(warriors, thresholds)
+
+        next_cursor = page1_data.get("nextCursor")
+        if (
+            stop_early
+            or not next_cursor
+            or threshold_damage != warriors[-1]["value"]
+            or len(warriors) < page_limit
+        ):
+            return {
+                "participants": participants,
+                "last_rank": last_rank,
+                "threshold_damage": threshold_damage,
+            }
+
+        # --- 2. Batch fetch remaining pages ---
+        current_base_cursor = next_cursor
+        finished = False
+
+        while not finished:
+            cursors_to_fetch = [
+                derive_next_cursor(current_base_cursor, i * page_limit)
+                for i in range(batch_size)
+            ]
+
+            tasks = [fetch_page(session, path, payload, c) for c in cursors_to_fetch]
+            pages_data = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for page_data in pages_data:
+                if isinstance(page_data, Exception) or not page_data:
+                    finished = True
+                    break
+
+                page_warriors = page_data.get("items", [])
+                if not page_warriors:
+                    finished = True
+                    break
+
+                t_dmg, l_rank, stop_early = process_warriors(page_warriors, thresholds)
+                if t_dmg is not None:
+                    threshold_damage = t_dmg
+                if l_rank is not None:
+                    last_rank = l_rank
+
+                if (
+                    stop_early
+                    or threshold_damage != page_warriors[-1]["value"]
+                    or len(page_warriors) < page_limit
+                ):
+                    finished = True
+                    break
+
+            if not finished:
+                current_base_cursor = derive_next_cursor(current_base_cursor, batch_size * page_limit)
+
+    return {
+        "participants": participants,
+        "last_rank": last_rank,
+        "threshold_damage": threshold_damage,
+    }
 
 
 def get_all_countries():
@@ -102,7 +242,7 @@ def get_all_battles():
             attacker_points = battle['currentRound']['attacker']['points'] or 0
             current_round_id = battle['currentRound']['_id']
             round_number = len(battle['rounds']) + 1
-            get_loot_threshold(
+            asyncio.run(async_get_loot_threshold(
                 battle_id=battle_id,
                 round_id=current_round_id,
                 region=region,
@@ -113,11 +253,90 @@ def get_all_battles():
                 attacker_damages=attacker_damages,
                 attacker_points=attacker_points,
                 round_number=round_number,
-            )
+            ))
         if next_cursor := r['result']['data'].get('nextCursor'):
             payload['cursor'] = next_cursor
         else:
             break
+
+
+async def async_get_all_battles():
+    path = "battle.getBattles"
+    batch_size = 5
+    page_limit = 100
+
+    base_payload = {
+        "isActive": True,
+        "limit": page_limit,
+        "direction": "forward",
+        "filter": "all",
+    }
+
+    async with aiohttp.ClientSession() as session:
+        # --- 1. Fetch Page 1 ---
+        page1_data = await fetch_page(session, path, base_payload, None)
+        all_battles_info = page1_data.get("items", [])
+        next_cursor = page1_data.get("nextCursor")
+
+        # --- 2. Batch fetch remaining battle pages if next_cursor exists ---
+        if next_cursor and len(all_battles_info) == page_limit:
+            current_base_cursor = next_cursor
+            finished = False
+
+            while not finished:
+                cursors_to_fetch = [
+                    derive_next_cursor(current_base_cursor, i * page_limit)
+                    for i in range(batch_size)
+                ]
+
+                tasks = [fetch_page(session, path, base_payload, c) for c in cursors_to_fetch]
+                pages_data = await asyncio.gather(*tasks, return_exceptions=True)
+
+                for page_data in pages_data:
+                    if isinstance(page_data, Exception) or not page_data:
+                        finished = True
+                        break
+
+                    items = page_data.get("items", [])
+                    if not items:
+                        finished = True
+                        break
+
+                    all_battles_info.extend(items)
+
+                    if len(items) < page_limit:
+                        finished = True
+                        break
+
+                if not finished:
+                    current_base_cursor = derive_next_cursor(current_base_cursor, batch_size * page_limit)
+
+        # --- 3. Process all gathered battles concurrently ---
+        threshold_tasks = []
+        for battle in all_battles_info:
+            if battle.get("type") == "tournament":
+                continue
+
+            current_round = battle.get("currentRound", {})
+            defender = current_round.get("defender", {})
+            attacker = current_round.get("attacker", {})
+
+            task = async_get_loot_threshold(
+                battle_id=battle["_id"],
+                round_id=current_round["_id"],
+                region=regions[battle["defender"]["region"]],
+                defender_country=countries[battle["defender"]["country"]],
+                defender_damages=defender.get("damages") or 0,
+                defender_points=defender.get("points") or 0,
+                attacker_country=countries[battle["attacker"]["country"]],
+                attacker_damages=attacker.get("damages") or 0,
+                attacker_points=attacker.get("points") or 0,
+                round_number=len(battle.get("rounds", [])),
+            )
+            threshold_tasks.append(task)
+
+        # Run all loot threshold calculations across all battles in parallel
+        await asyncio.gather(*threshold_tasks)
 
 
 def get_loot_threshold(
@@ -234,6 +453,60 @@ def get_loot_threshold(
     })
 
 
+async def async_get_loot_threshold(
+    battle_id: str,
+    round_id: str,
+    region: str,
+    defender_country: str,
+    defender_damages: int,
+    defender_points: int,
+    attacker_country: str,
+    attacker_damages: int,
+    attacker_points: int,
+    round_number: int,
+):
+    round_payload = {
+        "roundId": round_id,
+        "dataType": "damage",
+        "type": "user",
+        "side": "merged",
+        "limit": 100,
+    }
+
+    battle_payload = {
+        "battleId": battle_id,
+        "dataType": "damage",
+        "type": "user",
+        "side": "merged",
+        "limit": 100,
+    }
+
+    thresholds = {}
+    overall_thresholds = {}
+
+    # Gather both tasks and capture return metadata
+    round_meta, overall_meta = await asyncio.gather(
+        get_round_loot_distribution(round_payload, battle_id, round_id, thresholds),
+        get_round_loot_distribution(battle_payload, battle_id, round_id, overall_thresholds),
+    )
+
+    battle_reports.append({
+        "region": region,
+        "attacker": attacker_country,
+        "defender": defender_country,
+        "participants": overall_meta["participants"],
+        "rank": round_meta["last_rank"] or 0,
+        "need": (round_meta["threshold_damage"] or 0) + 1,  # Safely defaults None to 0
+        "thresholds": thresholds,
+        "defender_damages": defender_damages,
+        "defender_points": defender_points,
+        "attacker_damages": attacker_damages,
+        "attacker_points": attacker_points,
+        "overall_thresholds": overall_thresholds,
+        "round_number": round_number,
+    })
+
+
 def generate_html():
     def compact_number(value):
         value = float(value)
@@ -270,7 +543,7 @@ def generate_html():
     --card-bg: rgba(15, 23, 42, 0.6);
     --card-border: rgba(255, 255, 255, 0.06);
     --card-hover: rgba(255, 255, 255, 0.12);
-    
+
     --text-main: #f8fafc;
     --text-muted: #94a3b8;
     --text-dark: #475569;
@@ -288,7 +561,7 @@ body {{
     padding: 40px 24px;
     min-height: 100vh;
     background-color: var(--bg-base);
-    background-image: 
+    background-image:
         radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.04), transparent 25%),
         radial-gradient(circle at 85% 30%, rgba(239, 68, 68, 0.04), transparent 25%);
     background-attachment: fixed;
@@ -599,10 +872,10 @@ h1 {{
     def generate_threshold_bars_html(thresholds_dict, title):
         if not thresholds_dict:
             return ""
-            
+
         t_html = f'<div class="threshold-title">{title}</div>\n'
         max_dmg = max(thresholds_dict.values(), default=1)
-        
+
         for color, dmg in sorted(thresholds_dict.items(), key=lambda x: x[1], reverse=True):
             width = min((dmg / max_dmg) * 100, 100)
             t_html += f"""
@@ -689,7 +962,7 @@ h1 {{
     <div class="thresholds-container">
 """
         html += generate_threshold_bars_html(battle["thresholds"], f"Round {round_num} Loot")
-        
+
         if battle.get("overall_thresholds"):
             html += generate_threshold_bars_html(battle["overall_thresholds"], "Overall Battle Loot")
 
@@ -717,5 +990,6 @@ h1 {{
 
 get_all_countries()
 get_all_regions()
-get_all_battles()
+# get_all_battles()
+asyncio.run(async_get_all_battles())
 generate_html()
