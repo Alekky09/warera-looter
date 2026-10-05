@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WarEra Battle Report</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-base:#020617; --card-bg:rgba(15,23,42,.6); --card-border:rgba(255,255,255,.06);
+  --card-hover:rgba(255,255,255,.12); --text-main:#f8fafc; --text-muted:#94a3b8;
+  --text-dark:#475569; --defender:#3b82f6; --defender-light:#93c5fd;
+  --attacker:#ef4444; --attacker-light:#fca5a5;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:32px 24px;min-height:100vh;background-color:var(--bg-base);
+  background-image:radial-gradient(circle at 15% 50%,rgba(59,130,246,.04),transparent 25%),
+                   radial-gradient(circle at 85% 30%,rgba(239,68,68,.04),transparent 25%);
+  background-attachment:fixed;color:var(--text-main);font-family:Inter,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.container{max-width:1400px;margin:auto}
+.header-container{text-align:center;margin-bottom:28px}
+h1{
+  margin:0;font-size:36px;font-weight:800;letter-spacing:-1px;
+  background:linear-gradient(135deg,#f8fafc 0%,#94a3b8 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent
+}
+.subtitle{color:var(--text-muted);margin-top:8px;font-size:13px;font-weight:500;display:flex;
+  justify-content:center;align-items:center;gap:12px;flex-wrap:wrap}
+.badge-tag{background:rgba(255,255,255,.05);padding:4px 10px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.08)}
+.controls{
+  max-width:760px;margin:0 auto 36px;padding:18px;border-radius:16px;
+  background:rgba(15,23,42,.8);border:1px solid var(--card-border);box-shadow:0 8px 30px rgba(0,0,0,.25)
+}
+.control-row{display:flex;gap:10px}
+.api-input{
+  flex:1;min-width:0;padding:12px 14px;border-radius:10px;border:1px solid #334155;
+  background:#020617;color:#f8fafc;outline:none;font:inherit
+}
+.api-input:focus{border-color:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.15)}
+button{
+  padding:12px 18px;border:0;border-radius:10px;background:#2563eb;color:white;
+  font:600 14px Inter,sans-serif;cursor:pointer;white-space:nowrap
+}
+button:hover{background:#3b82f6}
+button:disabled{opacity:.55;cursor:not-allowed}
+.secondary{background:#334155}.secondary:hover{background:#475569}
+.options{display:flex;align-items:center;gap:12px;margin-top:10px;color:var(--text-muted);font-size:12px}
+.options input{accent-color:#2563eb}
+.status{margin-top:12px;font-size:12px;color:var(--text-muted);min-height:18px}
+.status.error{color:#fca5a5}.status.success{color:#86efac}
+.battle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:24px}
+.card{
+  position:relative;padding:24px;border-radius:20px;background:var(--card-bg);backdrop-filter:blur(16px);
+  border:1px solid var(--card-border);box-shadow:0 4px 24px rgba(0,0,0,.2);
+  transition:all .3s cubic-bezier(.4,0,.2,1)
+}
+.card:hover{transform:translateY(-4px);border-color:var(--card-hover);
+  box-shadow:0 12px 32px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.05)}
+.card-header{text-align:center;margin-bottom:20px}
+.card h3{margin:0 0 6px;font-size:20px;font-weight:700;letter-spacing:-.5px}
+.region-meta{display:inline-flex;align-items:center;gap:8px;color:var(--text-muted);font-size:11px;
+  font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.region-meta .dot{width:4px;height:4px;background:var(--text-dark);border-radius:50%}
+.side-labels{display:flex;justify-content:space-between;margin-bottom:8px}
+.side-label{display:flex;flex-direction:column;font-size:13px;font-weight:700}
+.side-label.defender{color:var(--defender-light);align-items:flex-start}
+.side-label.attacker{color:var(--attacker-light);align-items:flex-end;text-align:right}
+.points-count{color:var(--text-muted);font-size:11px;font-weight:600;margin-top:2px}
+.points-bar{position:relative;display:flex;width:100%;height:6px;border-radius:999px;background:#0f172a;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.5);margin-bottom:16px}
+.points-side{position:relative;width:50%;height:100%}
+.points-fill{position:absolute;top:0;height:100%;border-radius:999px}
+.points-fill.defender{right:0;background:linear-gradient(90deg,#1d4ed8,#60a5fa);
+  box-shadow:0 0 8px rgba(59,130,246,.4)}
+.points-fill.attacker{left:0;background:linear-gradient(270deg,#b91c1c,#f87171);
+  box-shadow:0 0 8px rgba(239,68,68,.4)}
+.points-center{position:absolute;top:-3px;left:50%;z-index:3;width:2px;height:12px;
+  transform:translateX(-50%);background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,.6)}
+.damage-bar{display:flex;width:100%;height:20px;border-radius:6px;background:#0f172a;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.6);overflow:hidden}
+.damage-segment{display:flex;align-items:center;padding:0 10px;font-size:11px;font-weight:700;color:white;
+  text-shadow:0 1px 2px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden}
+.damage-segment.defender{justify-content:flex-start;background:linear-gradient(90deg,#1e3a8a,#2563eb);
+  border-right:1px solid rgba(0,0,0,.3)}
+.damage-segment.attacker{justify-content:flex-end;background:linear-gradient(270deg,#7f1d1d,#dc2626);
+  border-left:1px solid rgba(255,255,255,.1)}
+.thresholds-container{margin-top:24px;padding:16px;background:rgba(0,0,0,.2);border-radius:12px;
+  border:1px solid rgba(255,255,255,.03)}
+.threshold-title{font-size:10px;font-weight:700;color:var(--text-dark);text-transform:uppercase;
+  letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.threshold-title::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
+.threshold-title:not(:first-child){margin-top:20px}
+.threshold-row{position:relative;width:100%;height:10px;margin:10px 0}
+.threshold-track{position:absolute;inset:0;border-radius:999px;background:#0f172a;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.8)}
+.threshold-fill{position:absolute;top:0;left:0;height:100%;border-radius:999px}
+.threshold-fill.red{background:linear-gradient(90deg,#991b1b,#f87171);box-shadow:0 0 8px rgba(239,68,68,.3)}
+.threshold-fill.gold{background:linear-gradient(90deg,#a16207,#fde047);box-shadow:0 0 8px rgba(234,179,8,.3)}
+.threshold-fill.purple{background:linear-gradient(90deg,#6b21a8,#c084fc);box-shadow:0 0 8px rgba(168,85,247,.3)}
+.threshold-fill.blue{background:linear-gradient(90deg,#1e40af,#60a5fa);box-shadow:0 0 8px rgba(59,130,246,.3)}
+.threshold-fill.green{background:linear-gradient(90deg,#166534,#4ade80);box-shadow:0 0 8px rgba(34,197,94,.3)}
+.threshold-number{position:absolute;top:50%;right:0;transform:translateY(-50%) translateX(20%);z-index:5;
+  background:#1e293b;border:1px solid rgba(255,255,255,.1);color:#f8fafc;font-size:10px;font-weight:700;
+  padding:3px 8px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.footer{margin-top:48px;text-align:center;color:var(--text-dark);font-size:12px;font-weight:500}
+.empty{text-align:center;color:var(--text-muted);padding:60px 20px}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #475569;border-top-color:#f8fafc;
+  border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:7px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:600px){
+  body{padding:24px 14px}.control-row{flex-direction:column}.battle-grid{grid-template-columns:1fr}
+  h1{font-size:30px}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header-container">
+    <h1>WarEra Battle Report</h1>
+    <div class="subtitle">
+      <span id="generated">Not loaded</span>
+      <span class="badge-tag">Ordered by lowest GREEN threshold</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="control-row">
+      <input id="apiKey" class="api-input" type="password" placeholder="Paste WarEra API key" autocomplete="off">
+      <button id="loadBtn">Load battles</button>
+    </div>
+    <div class="options">
+      <label><input id="rememberKey" type="checkbox"> Remember API key in this browser</label>
+      <button id="clearBtn" class="secondary" type="button">Clear saved key</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div id="battleGrid" class="battle-grid">
+    <div class="empty">Enter your API key and click “Load battles”.</div>
+  </div>
+  <div id="footer" class="footer"></div>
+</div>
+
+<script>
+"use strict";
+
+const API_BASE = "https://api2.warera.io/trpc";
+
+const WEAPONS = {
+  jet: 6, tank: 5, sniper: 4, rifle: 3, gun: 2
+};
+
+const THRESHOLDS = {
+  2: "green", 3: "blue", 4: "purple", 5: "gold", 6: "red"
+};
+
+const COLORS = {
+  red: "#dc2626", gold: "#eab308", purple: "#9333ea",
+  blue: "#2563eb", green: "#16a34a"
+};
+
+const els = {
+  apiKey: document.getElementById("apiKey"),
+  rememberKey: document.getElementById("rememberKey"),
+  loadBtn: document.getElementById("loadBtn"),
+  clearBtn: document.getElementById("clearBtn"),
+  status: document.getElementById("status"),
+  grid: document.getElementById("battleGrid"),
+  generated: document.getElementById("generated"),
+  footer: document.getElementById("footer")
+};
+
+const savedKey = localStorage.getItem("warera_api_key");
+if (savedKey) {
+  els.apiKey.value = savedKey;
+  els.rememberKey.checked = true;
+}
+
+function setStatus(message, type = "") {
+  els.status.className = "status " + type;
+  els.status.innerHTML = message;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
+function compactNumber(value) {
+  value = Number(value) || 0;
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return (value / 1_000_000_000).toFixed(1).replace(".0","") + "B";
+  if (abs >= 1_000_000) return (value / 1_000_000).toFixed(1).replace(".0","") + "M";
+  if (abs >= 1_000) return (value / 1_000).toFixed(1).replace(".0","") + "K";
+  return Math.trunc(value).toLocaleString();
+}
+
+/*
+ * The API uses cursors beginning with "v2.".
+ * This mirrors the cursor calculation in the original Python program.
+ */
+function deriveNextCursor(currentCursor, offsetStep) {
+  if (!currentCursor || !currentCursor.startsWith("v2.")) return currentCursor;
+
+  try {
+    const b64 = currentCursor.slice(3);
+    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+    const binary = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+    const decoded = new TextDecoder().decode(bytes);
+    const data = JSON.parse(decoded);
+
+    const numVal = data[0].v + offsetStep;
+    const nextHex = (BigInt("0x" + data[1].v) + BigInt(offsetStep)).toString(16);
+
+    const payload = [
+      { t: "num", v: numVal },
+      { t: "str", v: nextHex }
+    ];
+
+    const encodedJson = JSON.stringify(payload);
+    const encodedBytes = new TextEncoder().encode(encodedJson);
+    let binaryOut = "";
+    for (const b of encodedBytes) binaryOut += String.fromCharCode(b);
+
+    return "v2." + btoa(binaryOut)
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  } catch (e) {
+    console.warn("Could not derive cursor:", e);
+    return currentCursor;
+  }
+}
+
+async function apiPost(path, payload, apiKey) {
+  const response = await fetch(`${API_BASE}/${path}`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "accept": "*/*",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`API returned non-JSON response (${response.status})`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error?.json?.message || data?.error?.message || `HTTP ${response.status}`);
+  }
+
+  if (data?.error) {
+    throw new Error(data.error.json?.message || data.error.message || "API error");
+  }
+
+  return data.result.data;
+}
+
+async function getAllCountries(apiKey) {
+  const info = await apiPost("country.getAllCountries", {}, apiKey);
+  return Object.fromEntries(info.map(x => [x._id, x.name]));
+}
+
+async function getAllRegions(apiKey) {
+  const info = await apiPost("region.getRegionsObject", {}, apiKey);
+  return Object.fromEntries(Object.entries(info).map(([key, value]) => [key, value.name]));
+}
+
+async function fetchPage(path, payload, cursor, apiKey) {
+  return apiPost(path, cursor ? {...payload, cursor} : payload, apiKey);
+}
+
+function processWarriors(warriors, thresholds) {
+  let thresholdDamage = null;
+  let lastRank = null;
+
+  for (const w of warriors) {
+    if (!w?.lootItem) return { thresholdDamage:null, lastRank:null, stopEarly:true };
+
+    thresholdDamage = w.value;
+    lastRank = w.rank;
+
+    const code = w.lootItem.code;
+    const tier = WEAPONS[code] ?? parseInt(String(code).slice(-1), 10);
+    const thresholdName = THRESHOLDS[tier];
+
+    if (thresholdName) thresholds[thresholdName] = thresholdDamage;
+  }
+
+  return { thresholdDamage, lastRank, stopEarly:false };
+}
+
+async function getRoundLootDistribution(payload, thresholds, apiKey) {
+  const path = "battleRanking.getRanking";
+  const batchSize = 5;
+  const pageLimit = 100;
+
+  let participants = 0;
+  let lastRank = 0;
+  let thresholdDamage = 0;
+
+  const page1 = await fetchPage(path, payload, payload.cursor, apiKey);
+  participants = page1?.itemCount ?? 0;
+  const warriors = page1?.items ?? [];
+
+  if (!warriors.length) return {participants, lastRank, thresholdDamage};
+
+  let processed = processWarriors(warriors, thresholds);
+  thresholdDamage = processed.thresholdDamage;
+  lastRank = processed.lastRank;
+
+  let nextCursor = page1.nextCursor;
+
+  if (
+    processed.stopEarly ||
+    !nextCursor ||
+    thresholdDamage !== warriors[warriors.length - 1].value ||
+    warriors.length < pageLimit
+  ) {
+    return {participants, lastRank, thresholdDamage};
+  }
+
+  let currentBaseCursor = nextCursor;
+
+  while (true) {
+    const cursors = Array.from({length: batchSize}, (_, i) =>
+      deriveNextCursor(currentBaseCursor, i * pageLimit)
+    );
+
+    const pages = await Promise.all(
+      cursors.map(c => fetchPage(path, payload, c, apiKey).catch(error => ({__error:error})))
+    );
+
+    let finished = false;
+
+    for (const page of pages) {
+      if (page?.__error || !page) { finished = true; break; }
+
+      const pageWarriors = page.items ?? [];
+      if (!pageWarriors.length) { finished = true; break; }
+
+      const result = processWarriors(pageWarriors, thresholds);
+
+      if (result.thresholdDamage !== null) thresholdDamage = result.thresholdDamage;
+      if (result.lastRank !== null) lastRank = result.lastRank;
+
+      if (
+        result.stopEarly ||
+        thresholdDamage !== pageWarriors[pageWarriors.length - 1].value ||
+        pageWarriors.length < pageLimit
+      ) {
+        finished = true;
+        break;
+      }
+    }
+
+    if (finished) break;
+    currentBaseCursor = deriveNextCursor(currentBaseCursor, batchSize * pageLimit);
+  }
+
+  return {participants, lastRank, thresholdDamage};
+}
+
+async function getLootThreshold(battle, countries, regions, apiKey) {
+  const currentRound = battle.currentRound;
+  const defender = currentRound.defender || {};
+  const attacker = currentRound.attacker || {};
+
+  const roundPayload = {
+    roundId: currentRound._id,
+    dataType: "damage",
+    type: "user",
+    side: "merged",
+    limit: 100
+  };
+
+  const battlePayload = {
+    battleId: battle._id,
+    dataType: "damage",
+    type: "user",
+    side: "merged",
+    limit: 100
+  };
+
+  const thresholds = {};
+  const overallThresholds = {};
+
+  const [roundMeta, overallMeta] = await Promise.all([
+    getRoundLootDistribution(roundPayload, thresholds, apiKey),
+    getRoundLootDistribution(battlePayload, overallThresholds, apiKey)
+  ]);
+
+  return {
+    region: regions[battle.defender.region] ?? battle.defender.region,
+    attacker: countries[battle.attacker.country] ?? battle.attacker.country,
+    defender: countries[battle.defender.country] ?? battle.defender.country,
+    participants: overallMeta.participants,
+    rank: roundMeta.lastRank || 0,
+    need: (roundMeta.thresholdDamage || 0) + 1,
+    thresholds,
+    defender_damages: defender.damages || 0,
+    defender_points: defender.points || 0,
+    attacker_damages: attacker.damages || 0,
+    attacker_points: attacker.points || 0,
+    overall_thresholds: overallThresholds,
+
+    // Matches the async Python implementation: len(battle["rounds"])
+    round_number: (battle.rounds || []).length
+  };
+}
+
+async function getAllBattles(apiKey, countries, regions) {
+  const pageLimit = 100;
+  const batchSize = 5;
+
+  const basePayload = {
+    isActive: true,
+    limit: pageLimit,
+    direction: "forward",
+    filter: "all"
+  };
+
+  const page1 = await fetchPage("battle.getBattles", basePayload, null, apiKey);
+  let allBattles = page1.items || [];
+  const nextCursor = page1.nextCursor;
+
+  if (nextCursor && allBattles.length === pageLimit) {
+    let currentBaseCursor = nextCursor;
+    let finished = false;
+
+    while (!finished) {
+      const cursors = Array.from({length: batchSize}, (_, i) =>
+        deriveNextCursor(currentBaseCursor, i * pageLimit)
+      );
+
+      const pages = await Promise.all(
+        cursors.map(c => fetchPage("battle.getBattles", basePayload, c, apiKey)
+          .catch(error => ({__error:error})))
+      );
+
+      for (const page of pages) {
+        if (page?.__error || !page) { finished = true; break; }
+
+        const items = page.items || [];
+        if (!items.length) { finished = true; break; }
+
+        allBattles.push(...items);
+
+        if (items.length < pageLimit) {
+          finished = true;
+          break;
+        }
+      }
+
+      if (!finished) {
+        currentBaseCursor = deriveNextCursor(currentBaseCursor, batchSize * pageLimit);
+      }
+    }
+  }
+
+  const eligible = allBattles.filter(b => b.type !== "tournament");
+
+  setStatus(`<span class="spinner"></span>Calculating loot thresholds for ${eligible.length} active battles...`);
+
+  const reports = [];
+  // Run all battles concurrently, like the Python async implementation.
+  // If the API has strict rate limits, change this to a concurrency-limited queue.
+  const results = await Promise.all(
+    eligible.map(async battle => {
+      try {
+        return await getLootThreshold(battle, countries, regions, apiKey);
+      } catch (error) {
+        console.warn(`Failed to process battle ${battle._id}:`, error);
+        return null;
+      }
+    })
+  );
+
+  for (const result of results) {
+    if (result) reports.push(result);
+  }
+
+  return reports;
+}
+
+function thresholdBarsHtml(thresholds, title) {
+  if (!thresholds || !Object.keys(thresholds).length) return "";
+
+  const maxDmg = Math.max(...Object.values(thresholds).map(Number), 1);
+  const entries = Object.entries(thresholds)
+    .sort((a,b) => Number(b[1]) - Number(a[1]));
+
+  let html = `<div class="threshold-title">${escapeHtml(title)}</div>`;
+
+  for (const [color, dmg] of entries) {
+    const width = Math.min((Number(dmg) / maxDmg) * 100, 100);
+    html += `
+      <div class="threshold-row" title="${escapeHtml(compactNumber(dmg))}">
+        <div class="threshold-track">
+          <div class="threshold-fill ${escapeHtml(color)}" style="width:${width.toFixed(1)}%"></div>
+        </div>
+        <span class="threshold-number">${escapeHtml(compactNumber(dmg))}</span>
+      </div>`;
+  }
+
+  return html;
+}
+
+function renderReports(reports) {
+  reports.sort((a,b) =>
+    (a.thresholds?.green ?? Infinity) - (b.thresholds?.green ?? Infinity)
+  );
+
+  if (!reports.length) {
+    els.grid.innerHTML = `<div class="empty">No active battles could be loaded.</div>`;
+    els.footer.textContent = "";
+    return;
+  }
+
+  const pointsGoal = 300;
+
+  els.grid.innerHTML = reports.map(battle => {
+    const attacker = escapeHtml(battle.attacker);
+    const defender = escapeHtml(battle.defender);
+    const region = escapeHtml(battle.region);
+    const roundNum = battle.round_number || 1;
+
+    const defenderDamage = Number(battle.defender_damages) || 0;
+    const attackerDamage = Number(battle.attacker_damages) || 0;
+    const defenderPoints = Number(battle.defender_points) || 0;
+    const attackerPoints = Number(battle.attacker_points) || 0;
+
+    const totalDamage = defenderDamage + attackerDamage;
+    const defenderDamagePct = totalDamage > 0 ? defenderDamage / totalDamage * 100 : 50;
+    const attackerDamagePct = totalDamage > 0 ? attackerDamage / totalDamage * 100 : 50;
+
+    const defenderPointsPct = Math.min(Math.max(defenderPoints / pointsGoal * 100, 0), 100);
+    const attackerPointsPct = Math.min(Math.max(attackerPoints / pointsGoal * 100, 0), 100);
+
+    return `
+      <div class="card">
+        <div class="card-header">
+          <h3>${region}</h3>
+          <div class="region-meta">
+            ROUND ${roundNum}
+            <span class="dot"></span>
+            ${(battle.participants || 0).toLocaleString()} PLAYERS
+          </div>
+        </div>
+
+        <div class="side-labels">
+          <div class="side-label defender">
+            ${defender}
+            <span class="points-count">${defenderPoints.toLocaleString()} / ${pointsGoal} PTS</span>
+          </div>
+          <div class="side-label attacker">
+            ${attacker}
+            <span class="points-count">${attackerPoints.toLocaleString()} / ${pointsGoal} PTS</span>
+          </div>
+        </div>
+
+        <div class="points-bar">
+          <div class="points-side">
+            <div class="points-fill defender"
+                 style="width:${defenderPointsPct.toFixed(1)}%;right:0;left:auto"
+                 title="${defender}: ${defenderPoints.toLocaleString()}"></div>
+          </div>
+          <div class="points-side">
+            <div class="points-fill attacker"
+                 style="width:${attackerPointsPct.toFixed(1)}%;left:0;right:auto"
+                 title="${attacker}: ${attackerPoints.toLocaleString()}"></div>
+          </div>
+          <div class="points-center"></div>
+        </div>
+
+        <div class="damage-bar"
+             title="${defender}: ${compactNumber(defenderDamage)} • ${attacker}: ${compactNumber(attackerDamage)}">
+          <div class="damage-segment defender" style="width:${defenderDamagePct.toFixed(1)}%">
+            <span>${compactNumber(defenderDamage)}</span>
+          </div>
+          <div class="damage-segment attacker" style="width:${attackerDamagePct.toFixed(1)}%">
+            <span>${compactNumber(attackerDamage)}</span>
+          </div>
+        </div>
+
+        <div class="thresholds-container">
+          ${thresholdBarsHtml(battle.thresholds, `Round ${roundNum} Loot`)}
+          ${thresholdBarsHtml(battle.overall_thresholds, "Overall Battle Loot")}
+        </div>
+      </div>`;
+  }).join("");
+
+  els.footer.textContent = `${reports.length} active battles being tracked`;
+}
+
+async function load() {
+  const apiKey = els.apiKey.value.trim();
+
+  if (!apiKey) {
+    setStatus("Please enter an API key.", "error");
+    els.apiKey.focus();
+    return;
+  }
+
+  if (els.rememberKey.checked) localStorage.setItem("warera_api_key", apiKey);
+  else localStorage.removeItem("warera_api_key");
+
+  els.loadBtn.disabled = true;
+  els.grid.innerHTML = `<div class="empty"><span class="spinner"></span>Loading countries, regions and battles...</div>`;
+  els.footer.textContent = "";
+
+  try {
+    const [countries, regions] = await Promise.all([
+      getAllCountries(apiKey),
+      getAllRegions(apiKey)
+    ]);
+
+    const reports = await getAllBattles(apiKey, countries, regions);
+
+    renderReports(reports);
+
+    const now = new Date();
+    els.generated.textContent = `Generated ${now.toLocaleString()}`;
+    setStatus(`Loaded ${reports.length} active battles.`, "success");
+  } catch (error) {
+    console.error(error);
+    els.grid.innerHTML = `<div class="empty">Unable to load the battle report.</div>`;
+    setStatus(`Error: ${escapeHtml(error.message)}`, "error");
+  } finally {
+    els.loadBtn.disabled = false;
+  }
+}
+
+els.loadBtn.addEventListener("click", load);
+
+els.apiKey.addEventListener("keydown", event => {
+  if (event.key === "Enter") load();
+});
+
+els.clearBtn.addEventListener("click", () => {
+  localStorage.removeItem("warera_api_key");
+  els.apiKey.value = "";
+  els.rememberKey.checked = false;
+  setStatus("Saved API key cleared.");
+});
+</script>
+</body>
+</html>
