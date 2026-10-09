@@ -33,52 +33,14 @@ function showPlayerResults(html){els.playerResults.innerHTML=html;els.playerResu
 async function searchPlayerInput(){let query=els.playerSearch.value.trim(),key=els.key.value.trim(),token=++playerSearchToken;selectedPlayerId="";player=null;renderPlayer();if(query.length<2){hidePlayerResults();return}if(!key){showPlayerResults(`<div class="player-search-status">Enter your API key first.</div>`);return}showPlayerResults(`<div class="player-search-status">Searching...</div>`);try{let result=await searchPlayers(query,key);if(token!==playerSearchToken)return;let ids=result?.userIds||[];if(!ids.length){showPlayerResults(`<div class="player-search-status">No players found.</div>`);return}let users=await Promise.all(ids.slice(0,8).map(id=>userById(id,key).catch(()=>null)));if(token!==playerSearchToken)return;users=users.filter(Boolean);if(!users.length){showPlayerResults(`<div class="player-search-status">No players found.</div>`);return}showPlayerResults(users.map(u=>`<div class="player-result" data-player-id="${esc(u._id)}"><div class="player-result-name">${esc(u.username||u._id)}</div><div class="player-result-id">${esc(u._id)}</div></div>`).join(""));els.playerResults.querySelectorAll(".player-result").forEach(el=>el.onclick=()=>selectPlayer(el.dataset.playerId));}catch(e){if(token===playerSearchToken)showPlayerResults(`<div class="player-search-status">Search failed: ${esc(e.message)}</div>`)} }
 async function selectPlayer(id){let key=els.key.value.trim();if(!key||!id)return;selectedPlayerId=id;hidePlayerResults();try{player=await userById(id,key);buildRegionDistances(player.location);els.playerSearch.value=player.username||id;renderPlayer();if(reports.length)render()}catch(e){player=null;renderPlayer();status(`Unable to load player: ${esc(e.message)}`,"error")}}
 async function countries(key){let x=await post("country.getAllCountries",{},key);return Object.fromEntries(x.map(v=>[v._id,v.name]))}
-async function regions(key){
-  let x=await post("region.getRegionsObject",{},key), names={}, graph={};
-  function neighborIds(value){
-    if(Array.isArray(value)) return value.flatMap(v=>neighborIds(v));
-    if(typeof value==="string"||typeof value==="number") return [String(value)];
-    if(value&&typeof value==="object") return [value._id,value.id,value.regionId,value.region_id].filter(v=>v!==undefined&&v!==null).map(String);
-    return []
-  }
-  for(const [id,v] of Object.entries(x)){
-    names[id]=v?.name??id;
-    graph[id]=[];
-    let neighbors=v?.neighbors??v?.neighbours??v?.neighboringRegions??v?.neighbouringRegions??v?.adjacentRegions??[];
-    if(neighbors&&!Array.isArray(neighbors)&&typeof neighbors==="object") neighbors=Object.keys(neighbors);
-    graph[id]=neighborIds(neighbors).filter(n=>n!==id);
-  }
-  for(const [id,neighbors] of Object.entries(graph)) for(const n of neighbors){
-    if(!graph[n])graph[n]=[];
-    if(!graph[n].includes(id))graph[n].push(id)
-  }
-  return{names,graph}
-}
-function buildRegionDistances(start){
-  regionDistances={};
-  if(!start||!regionGraph[start])return;
-  let queue=[start];
-  regionDistances[start]=0;
-  for(let i=0;i<queue.length;i++){
-    let current=queue[i];
-    for(const neighbor of regionGraph[current]||[]){
-      if(regionDistances[neighbor]===undefined){
-        regionDistances[neighbor]=regionDistances[current]+1;
-        queue.push(neighbor)
-      }
-    }
-  }
-}
-function regionDistanceText(regionId){
-  if(!player||regionId===undefined||regionId===null)return"";
-  let d=regionDistances[String(regionId)];
-  return d===undefined?"Distance unavailable":`${d} ${d===1?"region":"regions"} away`
-}
+async function regions(key){let x=await post("region.getRegionsObject",{},key),names={},graph={};function neighborIds(value){if(Array.isArray(value))return value.flatMap(v=>neighborIds(v));if(typeof value==="string"||typeof value==="number")return[String(value)];if(value&&typeof value==="object")return[value._id,value.id,value.regionId,value.region_id].filter(v=>v!==undefined&&v!==null).map(String);return[]}for(const[id,v]of Object.entries(x)){names[id]=v?.name??id;graph[id]=[];let neighbors=v?.neighbors??v?.neighbours??v?.neighboringRegions??v?.neighbouringRegions??v?.adjacentRegions??[];if(neighbors&&!Array.isArray(neighbors)&&typeof neighbors==="object")neighbors=Object.keys(neighbors);graph[id]=neighborIds(neighbors).filter(n=>n!==id)}for(const[id,neighbors]of Object.entries(graph))for(const n of neighbors){if(!graph[n])graph[n]=[];if(!graph[n].includes(id))graph[n].push(id)}return{names,graph}}
+function buildRegionDistances(start){regionDistances={};if(!start||!regionGraph[start])return;let queue=[start];regionDistances[start]=0;for(let i=0;i<queue.length;i++){let current=queue[i];for(const neighbor of regionGraph[current]||[]){if(regionDistances[neighbor]===undefined){regionDistances[neighbor]=regionDistances[current]+1;queue.push(neighbor)}}}}
+function regionDistanceText(regionId){if(!player||regionId===undefined||regionId===null)return"";let d=regionDistances[String(regionId)];return d===undefined?"Distance unavailable":`${d} ${d===1?"region":"regions"} away`}
 async function ranking(payload,key){return post("battleRanking.getRanking",payload,key)}
 async function thresholds(payload,key,out){let page=await ranking(payload,key), n=page.itemCount||0, last=0, stop=false;function take(items){for(const w of items){if(!w?.lootItem){stop=true;return}last=w.rank;let code=w.lootItem.code,t=WEAPONS[code]??parseInt(String(code).slice(-1),10);if(TIER[t])out[TIER[t]]=w.value}}take(page.items||[]);let cur=page.nextCursor,limit=100;if(stop||!cur||(page.items||[]).length<limit)return{participants:n,rank:last};let base=cur;while(!stop){let curs=[0,1,2,3,4].map(i=>nextCursor(base,i*limit));let pages=await Promise.all(curs.map(c=>ranking({...payload,cursor:c},key).catch(()=>null)));for(const pg of pages){if(!pg||(pg.items||[]).length===0){stop=true;break}take(pg.items||[]);if(stop||(pg.items||[]).length<limit){stop=true;break}}if(!stop)base=nextCursor(base,5*limit)}return{participants:n,rank:last}}
 async function report(b,countriesMap,regionsMap,key){let round=b.currentRound,thr={},overall={};let common={dataType:"damage",type:"user",side:"merged",limit:100};let [r,o]=await Promise.all([thresholds({...common,roundId:round._id},key,thr),thresholds({...common,battleId:b._id},key,overall)]);let roundDamage=(+round.defender?.damages||0)+(+round.attacker?.damages||0),battleDamage=(+b.defender?.damages||0)+(+b.attacker?.damages||0);if(battleDamage===0){let roundsDamage=(b.rounds||[]).reduce((sum,rr)=>sum+(+rr?.defender?.damages||0)+(+rr?.attacker?.damages||0),0);battleDamage=roundsDamage||roundDamage}return{regionId:b.defender.region,region:regionsMap[b.defender.region]??b.defender.region,attacker:countriesMap[b.attacker.country]??b.attacker.country,defender:countriesMap[b.defender.country]??b.defender.country,participants:o.participants||0,round_participants:r.participants||0,rank:r.rank||0,need:0,thresholds:thr,overall_thresholds:overall,round_loot_quantity:Math.floor(roundDamage/200000),battle_loot_quantity:Math.floor(battleDamage/500000),round_damage:roundDamage,battle_damage:battleDamage,defender_damages:round.defender?.damages||0,defender_points:round.defender?.points||0,attacker_damages:round.attacker?.damages||0,attacker_points:round.attacker?.points||0,defender_won_rounds:b.defender?.wonRoundsCount||0,attacker_won_rounds:b.attacker?.wonRoundsCount||0,round_number:(b.rounds||[]).length}}
 async function battles(key,countriesMap,regionsMap){let payload={isActive:true,limit:100,direction:"forward",filter:"all"},p=await post("battle.getBattles",payload,key),all=p.items||[],cur=p.nextCursor;if(cur&&all.length===100){let base=cur,done=false;while(!done){let pages=await Promise.all([0,1,2,3,4].map(i=>post("battle.getBattles",{...payload,cursor:nextCursor(base,i*100)},key).catch(()=>null)));for(const pg of pages){if(!pg||!pg.items?.length){done=true;break}all.push(...pg.items);if(pg.items.length<100){done=true;break}}if(!done)base=nextCursor(base,500)}}let eligible=all.filter(b=>b.type!=="tournament");status(`Calculating loot thresholds for ${eligible.length} active battles...`);return(await Promise.all(eligible.map(b=>report(b,countriesMap,regionsMap,key).catch(()=>null)))).filter(Boolean)}
-function eta(b){let d=b.defender_points,a=b.attacker_points;if(d>=300||a>=300)return{m:0,side:d>=300?b.defender:b.attacker};let side;if(d===a){if(d===0&&a===0){let dd=+b.defender_damages||0,ad=+b.attacker_damages||0;if(dd===ad)return{m:null,side:null};side=dd>ad?"d":"a"}else{return{m:null,side:null}}}else side=d>a?"d":"a";let x=d,y=a,t=0;while(Math.max(x,y)<300&&t<1000){let total=x+y,g=total>500?6:total>400?5:total>300?4:total>200?3:total>100?2:1;if(side==="d")x+=g;else y+=g;t++}return{m:t*2,side:side==="d"?b.defender:b.attacker}}
+function eta(b){let d=Number(b.defender_points)||0,a=Number(b.attacker_points)||0;if(d>=300||a>=300)return{m:0,side:d>=300?b.defender:b.attacker};let side;if(d===a){let dd=Number(b.defender_damages)||0,ad=Number(b.attacker_damages)||0;if(dd===ad)return{m:null,side:null};side=dd>ad?"d":"a"}else side=d>a?"d":"a";let x=d,y=a,t=0;while(Math.max(x,y)<300&&t<1000){let total=x+y,g=total>500?6:total>400?5:total>300?4:total>200?3:total>100?2:1;if(side==="d")x+=g;else y+=g;t++}return{m:t*2,side:side==="d"?b.defender:b.attacker}}
 function etaText(e){if(e.m===null)return"ETA unavailable";if(e.m===0)return"Round complete";let h=Math.floor(e.m/60),m=e.m%60;return h?(m?`~${h}h ${m}m`:`~${h}h`):`~${m} min`}
 function thresholdHtml(th,title){if(!th||!Object.keys(th).length)return"";let order={green:1,blue:2,purple:3,gold:4,red:5}, entries=Object.entries(th).sort((a,b)=>(order[a[0]]||99)-(order[b[0]]||99)), vals=entries.map(x=>Number(x[1])||1), min=Math.min(...vals),max=Math.max(...vals);let log=(v)=>max===min?100:15+((Math.log10(Math.max(v,1))-Math.log10(min))/(Math.log10(max)-Math.log10(min)))*85;return `<div class="ttitle">${esc(title)}</div>`+entries.map(([tier,v])=>`<div class="trow ${tier}"><span class="tier">${tier}</span><div class="track"><div class="fill" style="width:${log(Number(v)).toFixed(1)}%"></div></div><span class="num">${esc(compact(v))}</span></div>`).join("")}
 function lootSortInfo(b,tier){let has=Number.isFinite(Number(b.thresholds?.[tier]));if(has)return{group:1,value:Number(b.thresholds[tier])||Infinity,label:"threshold"};let loot=b.round_loot_quantity||0,participants=b.round_participants||0;if(loot>participants)return{group:0,value:0,label:"too_much"};if(loot<participants)return{group:2,value:0,label:"too_little"};return{group:1,value:0,label:"balanced"}}
