@@ -8,7 +8,10 @@ async function build() {
         removeRedundantAttributes: true,
         removeEmptyAttributes: true,
         minifyCSS: true,
-        minifyJS: true
+        minifyJS: {
+            mangle: true,
+            compress: true,
+        }
     });
     fs.mkdirSync("dist", {recursive: true});
     fs.writeFileSync("dist/index.html", result);
