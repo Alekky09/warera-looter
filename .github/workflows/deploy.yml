@@ -17,31 +17,32 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.output.page_url }}
     runs-on: ubuntu-latest
 
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v6
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
-    - name: Setup Node.jobs
-      uses: actions/setup-node@v6
-      with:
-        node-version: 22
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
 
-    - name: Build minified file
-      run: npm run build
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Setup pages
-      uses: actions/upload-pages-artifact@v4
-      with:
-        path: ./dist
+      - name: Build minified file
+        run: npm run build
 
-    - name: Deploy
-      id: deployment
-      uses: actions/deploy-pages@v4
+      - name: Setup pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./dist
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
