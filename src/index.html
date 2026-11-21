@@ -68,6 +68,30 @@
         border-radius: 12px;
         box-shadow: 0 4px 20px #0002;
       }
+      .player-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .player-identity { min-width: 0; }
+      .player-refresh-countdown {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex: 0 0 auto;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 600;
+        white-space: nowrap;
+        padding-top: 2px;
+      }
+      .player-refresh-countdown svg {
+        width: 11px;
+        height: 11px;
+        animation: player-refresh-spin 1.4s linear infinite;
+      }
+      @keyframes player-refresh-spin { to { transform: rotate(360deg); } }
       .player-title {
         display: inline;
         font-size: 10px;
@@ -121,6 +145,48 @@
         color: #94a3b8;
         font-size: 10px;
         line-height: 1.4;
+      }
+      .overflow-panel {
+        margin-top: 8px;
+        padding: 8px 10px;
+        background: #020617;
+        border: 1px solid #1e293b;
+        border-radius: 8px;
+      }
+      .overflow-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      .overflow-title {
+        color: #cbd5e1;
+        font-size: 9px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .6px;
+      }
+      .overflow-ticks {
+        color: #64748b;
+        font-size: 9px;
+      }
+      .overflow-values {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .overflow-value-label {
+        color: #64748b;
+        font-size: 8px;
+        text-transform: uppercase;
+        letter-spacing: .45px;
+      }
+      .overflow-value {
+        margin-top: 2px;
+        color: #86efac;
+        font-size: 14px;
+        font-weight: 850;
       }
       .alpha-inline {
         display: inline-flex;
@@ -404,6 +470,44 @@
       }
       .status.ok {
         color: #86efac;
+      }
+      .refresh-status {
+        display: none;
+        margin: 0 0 12px;
+        padding: 8px 12px;
+        border: 1px solid #334155;
+        border-radius: 9px;
+        color: #bfdbfe;
+        background: #1e3a8a22;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .refresh-status.visible { display: block; }
+      .refresh-status.warning {
+        color: #fcd34d;
+        border-color: #92400e99;
+        background: #78350f33;
+      }
+      .refresh-status.error {
+        color: #fca5a5;
+        border-color: #991b1b99;
+        background: #7f1d1d33;
+      }
+      .card-load-status {
+        display: inline-block;
+        margin-top: 7px;
+        padding: 3px 7px;
+        border: 1px solid #475569;
+        border-radius: 999px;
+        color: #93c5fd;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .35px;
+        text-transform: uppercase;
+      }
+      .card-load-status.error {
+        color: #fca5a5;
+        border-color: #991b1b99;
       }
       /* Deprecated region-distance and travel-cost styles retained for later:
       .region-distance {
@@ -1094,6 +1198,7 @@
         </div>
         <div id="status" class="status"></div>
       </div>
+      <div id="refreshStatus" class="refresh-status" role="status" aria-live="polite"></div>
       <div id="player" class="player-card" style="display: none"></div>
       <div id="grid" class="grid">
         <div class="empty">Enter your API key and click “Load battles”.</div>
@@ -1119,6 +1224,7 @@
           playerSearch: $("playerSearch"),
           playerResults: $("playerResults"),
           player: $("player"),
+          refreshStatus: $("refreshStatus"),
         };
       let reports = [],
         sortKey = "green",
@@ -1133,6 +1239,12 @@
         playerSearchToken = 0,
         /* Deprecated travel pricing state: oilPrice = null, */
         foodExpanded = false,
+        playerRefreshCountdown = 10,
+        playerRefreshInFlight = false,
+        battleRefreshInFlight = false,
+        apiPauseUntil = 0,
+        apiGate = Promise.resolve(),
+        failedBattleCount = 0,
         damageBonusPercent = 0,
         foodLoadout = { bread: 0, steak: 0, fish: 0 };
       const saved = localStorage.getItem("warera_api_key");
@@ -1168,28 +1280,88 @@
         els.status.className = "status " + c;
         els.status.innerHTML = m;
       }
-      async function post(path, payload, key) {
-        let r = await fetch(`${API}/${path}`, {
-          method: "POST",
-          headers: {
-            "X-API-Key": key,
-            accept: "*/*",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-        let t = await r.text(),
-          d;
-        try {
-          d = JSON.parse(t);
-        } catch {
-          throw Error(`API returned non-JSON response (${r.status})`);
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+      function updateRefreshIndicator() {
+        const remaining = Math.max(0, Math.ceil((apiPauseUntil - Date.now()) / 1000));
+        if (remaining > 0) {
+          els.refreshStatus.className = "refresh-status visible warning";
+          els.refreshStatus.textContent = `WarEra API rate limit reached · retrying in ${remaining}s`;
+          return;
         }
-        if (!r.ok || d?.error)
-          throw Error(
-            d?.error?.json?.message || d?.error?.message || `HTTP ${r.status}`,
-          );
-        return d.result.data;
+        if (battleRefreshInFlight) {
+          els.refreshStatus.className = "refresh-status visible";
+          els.refreshStatus.textContent = "Refreshing battle information… Existing cards remain visible until their updates are complete.";
+          return;
+        }
+        if (failedBattleCount > 0) {
+          els.refreshStatus.className = "refresh-status visible error";
+          els.refreshStatus.textContent = `${failedBattleCount} battle update${failedBattleCount === 1 ? "" : "s"} failed · showing previous data where available.`;
+          return;
+        }
+        els.refreshStatus.className = "refresh-status";
+        els.refreshStatus.textContent = "";
+      }
+      function rateLimitDelay(response) {
+        const retryAfter = response.headers.get("retry-after");
+        if (retryAfter) {
+          const seconds = Number(retryAfter);
+          if (Number.isFinite(seconds)) return Math.max(1, seconds);
+          const dateDelay = (Date.parse(retryAfter) - Date.now()) / 1000;
+          if (Number.isFinite(dateDelay) && dateDelay > 0) return dateDelay;
+        }
+        const reset = Number(response.headers.get("ratelimit-reset"));
+        return Number.isFinite(reset) && reset > 0 ? reset : 60;
+      }
+      function registerRateLimit(response) {
+        const waitMs = rateLimitDelay(response) * 1000 + 1000;
+        apiPauseUntil = Math.max(apiPauseUntil, Date.now() + waitMs);
+        updateRefreshIndicator();
+      }
+      async function waitForApiSlot() {
+        let release;
+        const previous = apiGate;
+        apiGate = new Promise((resolve) => (release = resolve));
+        await previous;
+        try {
+          while (Date.now() < apiPauseUntil) {
+            await sleep(apiPauseUntil - Date.now());
+          }
+        } finally {
+          release();
+        }
+      }
+      async function post(path, payload, key) {
+        while (true) {
+          await waitForApiSlot();
+          const r = await fetch(`${API}/${path}`, {
+            method: "POST",
+            headers: {
+              "X-API-Key": key,
+              accept: "*/*",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          if (r.status === 429) {
+            registerRateLimit(r);
+            await r.text();
+            // Retry this exact request after the server-provided cooldown.
+            continue;
+          }
+          let t = await r.text(), d;
+          try {
+            d = JSON.parse(t);
+          } catch {
+            throw Error(`API returned non-JSON response (${r.status})`);
+          }
+          if (!r.ok || d?.error)
+            throw Error(
+              d?.error?.json?.message || d?.error?.message || `HTTP ${r.status}`,
+            );
+          return d.result.data;
+        }
       }
       function nextCursor(cur, step) {
         if (!cur?.startsWith("v2.")) return cur;
@@ -1308,6 +1480,7 @@
         let key = els.key.value.trim();
         if (!key || !id) return;
         selectedPlayerId = id;
+        playerRefreshCountdown = 10;
         localStorage.setItem("selected_player_id", id);
         hidePlayerResults();
         try {
@@ -1482,16 +1655,24 @@
             player: playerEntry,
             tierRanks,
           };
-        let base = cur;
-        while (!stop) {
-          let curs = [0, 1, 2, 3, 4].map((i) => nextCursor(base, i * limit));
-          let pages = await Promise.all(
-            curs.map((c) =>
-              ranking({ ...payload, cursor: c }, key).catch(() => null),
+        let base = cur,
+          remainingPages = Number.isFinite(Number(n)) && Number(n) > 0
+            ? Math.ceil(Math.max(0, Number(n) - (page.items || []).length) / limit)
+            : 5;
+        while (!stop && remainingPages > 0) {
+          // Fetch only the number of pages itemCount says remain, capped at five
+          // concurrent requests per batch. If itemCount is unavailable, retain
+          // the existing five-page discovery behavior.
+          let batchSize = Math.min(5, remainingPages),
+            curs = Array.from({ length: batchSize }, (_, i) =>
+              nextCursor(base, i * limit),
             ),
-          );
+            pages = await Promise.all(
+              curs.map((c) => ranking({ ...payload, cursor: c }, key)),
+            );
+          remainingPages -= batchSize;
           for (const pg of pages) {
-            if (!pg || (pg.items || []).length === 0) {
+            if ((pg.items || []).length === 0) {
               stop = true;
               break;
             }
@@ -1501,7 +1682,8 @@
               break;
             }
           }
-          if (!stop) base = nextCursor(base, 5 * limit);
+          if (!stop && remainingPages > 0)
+            base = nextCursor(base, batchSize * limit);
         }
         return {
           participants: n,
@@ -1594,8 +1776,8 @@
             "battle.getBattles",
             { ...payload, cursor: cur },
             key,
-          ).catch(() => null);
-          if (!pg || !pg.items?.length) break;
+          );
+          if (!pg.items?.length) break;
           all.push(...pg.items);
           cur = pg.nextCursor;
         }
@@ -1606,13 +1788,22 @@
         status(
           `Calculating loot thresholds for ${eligible.length} active battles...`,
         );
-        return (
-          await Promise.all(
-            eligible.map((b) =>
-              report(b, countriesMap, regionsMap, key).catch(() => null),
-            ),
-          )
-        ).filter(Boolean);
+        const previousById = new Map(reports.map((item) => [String(item.id), item]));
+        failedBattleCount = 0;
+        const updated = await Promise.all(
+          eligible.map(async (b) => {
+            try {
+              // report() only resolves after both round and overall loot calculations finish.
+              return await report(b, countriesMap, regionsMap, key);
+            } catch (error) {
+              failedBattleCount++;
+              console.warn(`Battle ${b._id} loot update failed; retaining previous data when available:`, error);
+              const previous = previousById.get(String(b._id));
+              return previous ? { ...previous, _loadStatus: "error" } : null;
+            }
+          }),
+        );
+        return updated.filter(Boolean);
       }
       function eta(b) {
         let d = Number(b.defender_points) || 0,
@@ -1923,6 +2114,57 @@
               maximumFractionDigits: digits,
             });
       }
+      function playerOverflow(p, now = Date.now()) {
+        const buffs = p?.buffs || {},
+          endMs = Date.parse(buffs.debuffEndAt);
+        if (
+          !Number.isFinite(endMs) ||
+          endMs <= now ||
+          !Array.isArray(buffs.debuffCodes) ||
+          !buffs.debuffCodes.length
+        ) return null;
+        // Count full-hour clock boundaries in (now, debuff end], e.g. 17:53–23:53 = 6 ticks.
+        const ticks = Math.max(
+          0,
+          Math.floor(endMs / 3600000) - Math.floor(now / 3600000),
+        );
+        const health = p.skills?.health || {},
+          hunger = p.skills?.hunger || {},
+          hp = Math.max(
+            0,
+            (Number(health.currentBarValue) || 0) +
+              ticks * (Number(health.total) || 0) * 0.1 -
+              (Number(health.total) || 0),
+          ),
+          food = Math.max(
+            0,
+            (Number(hunger.currentBarValue) || 0) +
+              ticks * (Number(hunger.total) || 0) * 0.1 -
+              (Number(hunger.total) || 0),
+          );
+        return { ticks, hp, hunger: Math.floor(food + 1e-9), endMs };
+      }
+      function overflowHtml(p) {
+        const value = playerOverflow(p);
+        if (!value) return "";
+        return `<section class="overflow-panel" id="playerOverflow" data-debuff-end="${value.endMs}"><div class="overflow-heading"><span class="overflow-title">Overflow</span><span class="overflow-ticks" data-overflow-ticks>${value.ticks} hourly ticks until debuff ends</span></div><div class="overflow-values"><div><div class="overflow-value-label">HP you can spend</div><div class="overflow-value" data-overflow-hp>${fmtEstimate(value.hp, 1)} HP</div></div><div><div class="overflow-value-label">Food you can eat</div><div class="overflow-value" data-overflow-hunger>${value.hunger} items</div></div></div></section>`;
+      }
+      function updatePlayerOverflow() {
+        const panel = els.player.querySelector("#playerOverflow");
+        if (!panel || !player) return;
+        const value = playerOverflow(player);
+        if (!value) {
+          panel.remove();
+          return;
+        }
+        panel.dataset.debuffEnd = String(value.endMs);
+        const ticks = panel.querySelector("[data-overflow-ticks]"),
+          hp = panel.querySelector("[data-overflow-hp]"),
+          hunger = panel.querySelector("[data-overflow-hunger]");
+        if (ticks) ticks.textContent = `${value.ticks} hourly ticks until debuff ends`;
+        if (hp) hp.textContent = `${fmtEstimate(value.hp, 1)} HP`;
+        if (hunger) hunger.textContent = `${value.hunger} items`;
+      }
       function renderPlayer() {
         if (!player) {
           els.player.style.display = "none";
@@ -1961,7 +2203,7 @@
             foodTotal === 0
               ? "No food"
               : `${foodLoadout.bread ? foodLoadout.bread + " bread " : ""}${foodLoadout.steak ? foodLoadout.steak + " steak " : ""}${foodLoadout.fish ? foodLoadout.fish + " fish" : ""}`.trim();
-        els.player.innerHTML = `<div class="player-identity"><span class="player-title">Selected player</span><span class="player-name">${esc(player.username || player._id)}</span>${buffIndicatorHtml(player)}</div><div class="player-stats"><div class="player-stat"><div class="player-stat-label">Health</div><div class="player-stat-value">${Number(h).toFixed(1)} / ${esc(ht)}</div></div><div class="player-stat"><div class="player-stat-label">Hunger</div><div class="player-stat-value">${Number(hunger).toFixed(1)} / ${esc(hungerTotal)}</div></div><div class="player-stat"><div class="player-stat-label">Avg dmg / hit</div><div class="player-stat-value">${calc ? fmtEstimate(calc.avgDamage) : "—"}</div></div><div class="player-stat player-stat-hits"><div class="player-stat-label">Hits available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.hits) : "—"}</div></div><div class="player-stat player-stat-wide player-stat-total"><div class="player-stat-label">Total damage available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.totalDamage) : "—"}</div>${calc ? `<div class="player-stat-label">Base ${fmtEstimate(calc.baseTotalDamage)} + ${fmtEstimate(damageBonusPercent, 1)}%</div>` : ""}</div></div><div class="damage-bonus-control"><label for="damageBonusPercent">Damage bonus modifier (%)</label><input id="damageBonusPercent" class="input" type="number" min="0" step="0.1" value="${esc(damageBonusPercent)}" /><span>Automatically set from the military unit headquarters upgrade (5% per level). You can adjust it manually.</span></div><div class="food-summary"><span class="food-summary-text">Food: ${esc(foodLabel)}</span><button type="button" class="food-toggle" id="foodToggle">${foodExpanded ? "Done" : "Edit food"}</button></div><div class="food-plan" ${foodExpanded ? "" : "hidden"}><div class="food-plan-head"><span class="food-plan-title">Food loadout</span><span class="food-remaining">${foodTotal}/4 uses</span></div><div class="food-presets">${[
+        els.player.innerHTML = `<div class="player-card-header"><div class="player-identity"><span class="player-title">Selected player</span><span class="player-name">${esc(player.username || player._id)}</span>${buffIndicatorHtml(player)}</div><span class="player-refresh-countdown" id="playerRefreshCountdown"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity=".25"></circle><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path></svg><span>Refreshing in ${playerRefreshCountdown}s</span></span></div><div class="player-stats"><div class="player-stat"><div class="player-stat-label">Health</div><div class="player-stat-value">${Number(h).toFixed(1)} / ${esc(ht)}</div></div><div class="player-stat"><div class="player-stat-label">Hunger</div><div class="player-stat-value">${Number(hunger).toFixed(1)} / ${esc(hungerTotal)}</div></div><div class="player-stat"><div class="player-stat-label">Avg dmg / hit</div><div class="player-stat-value">${calc ? fmtEstimate(calc.avgDamage) : "—"}</div></div><div class="player-stat player-stat-hits"><div class="player-stat-label">Hits available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.hits) : "—"}</div></div><div class="player-stat player-stat-wide player-stat-total"><div class="player-stat-label">Total damage available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.totalDamage) : "—"}</div>${calc ? `<div class="player-stat-label">Base ${fmtEstimate(calc.baseTotalDamage)} + ${fmtEstimate(damageBonusPercent, 1)}%</div>` : ""}</div></div>${overflowHtml(player)}<div class="damage-bonus-control"><label for="damageBonusPercent">Damage bonus modifier (%)</label><input id="damageBonusPercent" class="input" type="number" min="0" step="0.1" value="${esc(damageBonusPercent)}" /><span>Automatically set from the military unit headquarters upgrade (5% per level). You can adjust it manually.</span></div><div class="food-summary"><span class="food-summary-text">Food: ${esc(foodLabel)}</span><button type="button" class="food-toggle" id="foodToggle">${foodExpanded ? "Done" : "Edit food"}</button></div><div class="food-plan" ${foodExpanded ? "" : "hidden"}><div class="food-plan-head"><span class="food-plan-title">Food loadout</span><span class="food-remaining">${foodTotal}/4 uses</span></div><div class="food-presets">${[
           { id: "none", label: "No food" },
           { id: "2bread", label: "2 breads" },
           { id: "1steak", label: "1 steak" },
@@ -2067,18 +2309,61 @@
               apct = Math.min((ap / 300) * 100, 100),
               ddpct = total ? (dd / total) * 100 : 50,
               adpct = total ? (ad / total) * 100 : 50,
-              e = eta(b);
+              e = eta(b),
+              loadBadge =
+                b._loadStatus === "loading"
+                  ? `<span class="card-load-status">Updating loot…</span>`
+                  : b._loadStatus === "error"
+                    ? `<span class="card-load-status error">Update failed · showing saved data</span>`
+                    : "";
             let participation = b.player_round,
               cardTier =
                 selectedPlayerId && participation?.tier
                   ? ` player-tier-${participation.tier}`
                   : "";
-            return `<a class="card${cardTier}" href="https://app.warera.io/battle/${encodeURIComponent(b.id)}" target="_blank" rel="noopener noreferrer"><!-- Deprecated region distance and travel-cost display omitted. -->${playerParticipationHtml(b)}<div class="card-head"><h3>${esc(b.region)}</h3><div class="meta">ROUND ${b.round_number || 1}<span> • </span>${(b.participants || 0).toLocaleString()} PLAYERS</div>${lootDiagnosisHtml(b, sortKey)}</div>${lootMeta(b)}<div class="sides"><div class="side def">${esc(b.defender)}<span class="pts">${dp.toLocaleString()} / 300 PTS</span></div><div class="match-center"><div class="series-score">${b.defender_won_rounds || 0} – ${b.attacker_won_rounds || 0}</div><div class="eta">${etaHtml(e)}</div></div><div class="side att">${esc(b.attacker)}<span class="pts">${ap.toLocaleString()} / 300 PTS</span></div></div><div class="points"><div class="pfill def" style="width:${dpct / 2}%"></div><div class="pfill att" style="width:${apct / 2}%"></div><div class="center"></div></div><div class="damage-wrap"><svg class="damage-pointer" viewBox="0 0 16 8" aria-hidden="true"><path d="M0 0H16L8 8Z" fill="#f8fafc"/></svg><div class="damage"><div class="def" style="width:${ddpct}%">${compact(dd)}</div><div class="att" style="width:${adpct}%">${compact(ad)}</div></div></div><div class="thresholds">${thresholdHtml(b.thresholds, b.tier_counts, `Round ${b.round_number || 1} Loot`, b.round_loot_quantity, b.round_participants, b.last_round_tier)}${thresholdHtml(b.overall_thresholds, b.overall_tier_counts, "Overall Battle Loot", b.battle_loot_quantity, b.participants, b.overall_last_tier)}</div></a>`;
+            return `<a class="card${cardTier}" href="https://app.warera.io/battle/${encodeURIComponent(b.id)}" target="_blank" rel="noopener noreferrer"><!-- Deprecated region distance and travel-cost display omitted. -->${playerParticipationHtml(b)}<div class="card-head"><h3>${esc(b.region)}</h3><div class="meta">ROUND ${b.round_number || 1}<span> • </span>${(b.participants || 0).toLocaleString()} PLAYERS</div>${lootDiagnosisHtml(b, sortKey)}${loadBadge}</div>${lootMeta(b)}<div class="sides"><div class="side def">${esc(b.defender)}<span class="pts">${dp.toLocaleString()} / 300 PTS</span></div><div class="match-center"><div class="series-score">${b.defender_won_rounds || 0} – ${b.attacker_won_rounds || 0}</div><div class="eta">${etaHtml(e)}</div></div><div class="side att">${esc(b.attacker)}<span class="pts">${ap.toLocaleString()} / 300 PTS</span></div></div><div class="points"><div class="pfill def" style="width:${dpct / 2}%"></div><div class="pfill att" style="width:${apct / 2}%"></div><div class="center"></div></div><div class="damage-wrap"><svg class="damage-pointer" viewBox="0 0 16 8" aria-hidden="true"><path d="M0 0H16L8 8Z" fill="#f8fafc"/></svg><div class="damage"><div class="def" style="width:${ddpct}%">${compact(dd)}</div><div class="att" style="width:${adpct}%">${compact(ad)}</div></div></div><div class="thresholds">${thresholdHtml(b.thresholds, b.tier_counts, `Round ${b.round_number || 1} Loot`, b.round_loot_quantity, b.round_participants, b.last_round_tier)}${thresholdHtml(b.overall_thresholds, b.overall_tier_counts, "Overall Battle Loot", b.battle_loot_quantity, b.participants, b.overall_last_tier)}</div></a>`;
           })
           .join("");
         els.footer.textContent = `${sorted.length} active battles being tracked`;
       }
+      async function refreshPlayerInfo() {
+        if (playerRefreshInFlight || !selectedPlayerId) return;
+        const id = selectedPlayerId;
+        const key = els.key.value.trim();
+        if (!key) return;
+        playerRefreshInFlight = true;
+        try {
+          const refreshedPlayer = await userById(id, key);
+          if (String(selectedPlayerId) !== String(id)) return;
+          player = refreshedPlayer;
+          // Keep the user's current damage-bonus adjustment; periodic refresh only updates player data.
+          renderPlayer();
+        } catch (e) {
+          console.warn("Unable to refresh player information:", e);
+        } finally {
+          playerRefreshInFlight = false;
+          playerRefreshCountdown = 10;
+          updatePlayerRefreshCountdownLabel();
+        }
+      }
+      function updatePlayerRefreshCountdownLabel() {
+        const label = els.player.querySelector("#playerRefreshCountdown span");
+        if (label && player) label.textContent = `Refreshing in ${playerRefreshCountdown}s`;
+      }
+      function tickPlayerRefreshCountdown() {
+        if (!selectedPlayerId || !player) return;
+        updatePlayerOverflow();
+        if (playerRefreshCountdown <= 1) {
+          playerRefreshCountdown = 0;
+          updatePlayerRefreshCountdownLabel();
+          refreshPlayerInfo();
+          return;
+        }
+        playerRefreshCountdown -= 1;
+        updatePlayerRefreshCountdownLabel();
+      }
       async function load() {
+        if (battleRefreshInFlight) return;
         let key = els.key.value.trim();
         if (!key) {
           status("Please enter an API key.", "error");
@@ -2086,8 +2371,16 @@
         }
         if (els.remember.checked) localStorage.setItem("warera_api_key", key);
         else localStorage.removeItem("warera_api_key");
+        battleRefreshInFlight = true;
+        failedBattleCount = 0;
         els.load.disabled = true;
-        els.grid.innerHTML = `<div class="empty">Loading...</div>`;
+        if (reports.length) {
+          reports = reports.map((b) => ({ ...b, _loadStatus: "loading" }));
+          render();
+        } else {
+          els.grid.innerHTML = `<div class="empty">Loading battles…</div>`;
+        }
+        updateRefreshIndicator();
         try {
           let [c, r] = await Promise.all([countries(key), regions(key)]);
           regionsMap = r.names;
@@ -2107,16 +2400,27 @@
           render();
           els.load.textContent = "Refresh battles";
           els.generated.textContent = `Generated ${new Date().toLocaleString()}`;
-          status(`Loaded ${reports.length} active battles.`, "ok");
+          status(
+            failedBattleCount
+              ? `Updated available battles; ${failedBattleCount} battle${failedBattleCount === 1 ? "" : "s"} retained previous loot data.`
+              : `Loaded ${reports.length} active battles.`,
+            failedBattleCount ? "error" : "ok",
+          );
         } catch (e) {
           console.error(e);
-          status(`Error: ${esc(e.message)}`, "error");
-          els.grid.innerHTML = `<div class="empty">Unable to load the battle report.</div>`;
+          reports = reports.map((b) => ({ ...b, _loadStatus: "error" }));
+          if (reports.length) render();
+          else els.grid.innerHTML = `<div class="empty">Unable to load the battle report. Please try again.</div>`;
+          status(`Error: ${esc(e.message)}. Previous battle cards were kept where possible.`, "error");
         } finally {
+          battleRefreshInFlight = false;
           els.load.disabled = false;
+          updateRefreshIndicator();
         }
       }
       setInterval(updateBuffCountdowns, 15000);
+      setInterval(tickPlayerRefreshCountdown, 1000);
+      setInterval(updateRefreshIndicator, 1000);
       els.playerSearch.oninput = () => {
         clearTimeout(playerSearchTimer);
         playerSearchTimer = setTimeout(searchPlayerInput, 250);
