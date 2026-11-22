@@ -58,7 +58,7 @@
         min-width: 0;
       }
       .player-card {
-        position: static;
+        position: relative;
         width: 100%;
         min-width: 0;
         margin: 0 0 18px;
@@ -68,6 +68,36 @@
         border-radius: 12px;
         box-shadow: 0 4px 20px #0002;
       }
+      .player-selector {
+        display: flex;
+        align-items: end;
+        gap: 10px;
+        margin: 14px 0 10px;
+        min-width: 0;
+        padding-right: 150px;
+      }
+      .player-selector-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .player-selector-field.player-field { flex: 1 1 260px; }
+      .player-selector-field.damage-field { flex: 0 0 150px; }
+      .player-selector-field > label {
+        color: #64748b;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .7px;
+        text-transform: uppercase;
+      }
+      .player-selector .buff-status-pill { flex: 0 0 auto; margin-bottom: 5px; }
+      .player-selector .player-search { position: relative; flex: 1; min-width: 0; }
+      .player-selector .input { box-sizing: border-box; width: 100%; min-width: 0; flex: 0 0 36px; height: 36px; min-height: 36px; padding: 8px 10px; font-size: 12px; line-height: 18px; }
+      .player-selector input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+      .player-selector input[type="number"]::-webkit-inner-spin-button,
+      .player-selector input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+      .player-empty { color: var(--muted); font-size: 12px; padding: 8px 0 2px; }
       .player-card-header {
         display: flex;
         align-items: flex-start;
@@ -76,6 +106,9 @@
       }
       .player-identity { min-width: 0; }
       .player-refresh-countdown {
+        position: absolute;
+        top: 10px;
+        right: 12px;
         display: inline-flex;
         align-items: center;
         gap: 5px;
@@ -84,7 +117,7 @@
         font-size: 10px;
         font-weight: 600;
         white-space: nowrap;
-        padding-top: 2px;
+        padding-top: 0;
       }
       .player-refresh-countdown svg {
         width: 11px;
@@ -325,29 +358,6 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-      .damage-bonus-control {
-        display: grid;
-        grid-template-columns: minmax(180px, auto) minmax(90px, 130px);
-        align-items: center;
-        gap: 8px 12px;
-        margin-top: 12px;
-        max-width: 430px;
-      }
-      .damage-bonus-control label {
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 600;
-      }
-      .damage-bonus-control input {
-        width: 100%;
-        min-width: 0;
-      }
-      .damage-bonus-control span {
-        grid-column: 1 / -1;
-        color: var(--muted);
-        font-size: 11px;
-        line-height: 1.4;
-      }
       .player-stat-value {
         font-size: 12px;
         font-weight: 800;
@@ -365,6 +375,78 @@
         display: flex;
         gap: 8px;
         align-items: center;
+      }
+      .battle-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px 18px;
+        width: 100%;
+        min-width: 0;
+        margin: 0;
+        padding: 6px 12px;
+        background: rgba(15, 23, 42, 0.52);
+        border: 1px solid #1e293b;
+        border-radius: 10px;
+      }
+      .battle-filters {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        min-width: 0;
+      }
+      .sort-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .sort-control .select { padding: 6px 11px; font-size: 11px; }
+      .filter-label {
+        color: #94a3b8;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .55px;
+      }
+      .filter-pills {
+        display: inline-flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .filter-pill {
+        padding: 6px 11px;
+        border: 1px solid #334155;
+        border-radius: 999px;
+        background: #020617;
+        color: #cbd5e1;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+      .filter-pill.active {
+        border-color: #38bdf8;
+        background: #0c4a6e66;
+        color: #bae6fd;
+      }
+      .filter-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: #cbd5e1;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .filter-check input { accent-color: #38bdf8; }
+      .filter-check input:disabled { cursor: not-allowed; }
+      .filter-help {
+        color: #64748b;
+        font-size: 10px;
       }
       .input,
       .select {
@@ -984,7 +1066,7 @@
           max-width: 1800px;
           display: grid;
           grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.6fr);
-          grid-template-areas: "header header" "controls player" "grid grid" "footer footer";
+          grid-template-areas: "header header" "controls player" "toolbar toolbar" "grid grid" "footer footer";
           column-gap: 16px;
           row-gap: 12px;
           align-items: start;
@@ -1025,19 +1107,12 @@
           grid-template-columns: minmax(0, 1fr) auto;
           gap: 7px;
         }
-        #key {
-          grid-column: 1 / -1;
-        }
         .controls .input,
         .controls .select,
         .controls button {
           min-width: 0;
           padding: 8px 10px;
           font-size: 12px;
-        }
-        .player-search {
-          width: 100%;
-          min-width: 0;
         }
         .options {
           display: flex;
@@ -1069,6 +1144,10 @@
           padding: 10px 12px;
           border-radius: 10px;
           min-width: 0;
+        }
+        .battle-toolbar {
+          grid-area: toolbar;
+          min-height: 48px;
         }
         .player-title {
           font-size: 9px;
@@ -1120,6 +1199,22 @@
           gap: 8px;
         }
       }
+      @media (min-width: 1000px) and (max-width: 1250px) {
+        .battle-toolbar {
+          flex-wrap: wrap;
+        }
+        .sort-control {
+          margin-left: 0;
+        }
+      }
+      @media (max-width: 700px) {
+        .player-selector { align-items: stretch; flex-wrap: wrap; padding-right: 0; gap: 8px; }
+        .player-selector-field.player-field { flex: 1 1 100%; }
+        .player-selector-field.damage-field { flex: 1 1 120px; }
+        .player-selector .buff-status-pill { margin: 0 0 7px; }
+        .player-refresh-countdown { top: 9px; right: 10px; }
+        .player-card { padding-top: 30px; }
+      }
       @media (max-width: 999px) {
         .container {
           display: block;
@@ -1164,42 +1259,43 @@
             type="password"
             placeholder="Paste WarEra API key"
           />
-          <div class="player-search">
-            <input
-              id="playerSearch"
-              class="input"
-              type="text"
-              placeholder="Search player by name"
-              autocomplete="off"
-            />
-            <div
-              id="playerResults"
-              class="player-results"
-              style="display: none"
-            ></div>
-          </div>
           <button id="load">Load battles</button>
         </div>
         <div class="options">
           <label
             ><input id="remember" type="checkbox" /> Remember API key in this
             browser</label
-          ><button id="clear" class="secondary">Clear saved key</button
-          ><label
-            >Sort by
-            <select id="sort" class="select">
-              <option value="green">Green</option>
-              <option value="blue">Blue</option>
-              <option value="purple">Purple</option>
-              <option value="gold">Gold</option>
-              <option value="red">Red</option>
-            </select></label
-          >
+          ><button id="clear" class="secondary">Clear saved key</button>
         </div>
         <div id="status" class="status"></div>
       </div>
       <div id="refreshStatus" class="refresh-status" role="status" aria-live="polite"></div>
-      <div id="player" class="player-card" style="display: none"></div>
+      <div id="player" class="player-card"></div>
+      <div class="battle-toolbar" aria-label="Battle sorting and filters">
+        <div class="battle-filters" aria-label="Battle filters">
+          <span class="filter-label">Ends in</span>
+          <div class="filter-pills" role="group" aria-label="Estimated time until round ends">
+            <button type="button" class="filter-pill active" data-end-filter="0" aria-pressed="true">All</button>
+            <button type="button" class="filter-pill" data-end-filter="15" aria-pressed="false">15m</button>
+            <button type="button" class="filter-pill" data-end-filter="30" aria-pressed="false">30m</button>
+            <button type="button" class="filter-pill" data-end-filter="60" aria-pressed="false">1h</button>
+          </div>
+          <label class="filter-check">
+            <input id="hideLooted" type="checkbox" disabled />
+            Hide battles where I have current-round loot
+          </label>
+          <span id="hideLootedHelp" class="filter-help">Select a player to enable</span>
+        </div>
+        <label class="sort-control">Sort by
+          <select id="sort" class="select">
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+            <option value="purple">Purple</option>
+            <option value="gold">Gold</option>
+            <option value="red">Red</option>
+          </select>
+        </label>
+      </div>
       <div id="grid" class="grid">
         <div class="empty">Enter your API key and click “Load battles”.</div>
       </div>
@@ -1225,9 +1321,13 @@
           playerResults: $("playerResults"),
           player: $("player"),
           refreshStatus: $("refreshStatus"),
+          hideLooted: $("hideLooted"),
+          hideLootedHelp: $("hideLootedHelp"),
         };
       let reports = [],
         sortKey = "green",
+        endTimeFilterMinutes = 0,
+        hideLootedBattles = false,
         player = null,
         regionsMap = {},
         /* Deprecated travel data retained for possible reactivation:
@@ -1235,6 +1335,7 @@
         regionDistances = {},
         */
         selectedPlayerId = localStorage.getItem("selected_player_id") || "",
+        playerSearchQuery = localStorage.getItem("selected_player_name") || "",
         playerSearchTimer = null,
         playerSearchToken = 0,
         /* Deprecated travel pricing state: oilPrice = null, */
@@ -1253,8 +1354,6 @@
         els.remember.checked = true;
       }
       const savedPlayerName = localStorage.getItem("selected_player_name");
-      if (selectedPlayerId && savedPlayerName)
-        els.playerSearch.value = savedPlayerName;
       function esc(v) {
         return String(v ?? "").replace(
           /[&<>"']/g,
@@ -1417,11 +1516,23 @@
         let query = els.playerSearch.value.trim(),
           key = els.key.value.trim(),
           token = ++playerSearchToken;
+        playerSearchQuery = query;
         selectedPlayerId = "";
         localStorage.removeItem("selected_player_id");
         localStorage.removeItem("selected_player_name");
         player = null;
+        // renderPlayer rebuilds the player panel, including the search input.
+        // Preserve focus and the caret so typing can continue after each lookup.
+        const searchHadFocus = document.activeElement === els.playerSearch;
+        const selectionStart = searchHadFocus ? els.playerSearch.selectionStart : null;
+        const selectionEnd = searchHadFocus ? els.playerSearch.selectionEnd : null;
         renderPlayer();
+        if (searchHadFocus && els.playerSearch) {
+          els.playerSearch.focus({ preventScroll: true });
+          if (selectionStart !== null && selectionEnd !== null) {
+            els.playerSearch.setSelectionRange(selectionStart, selectionEnd);
+          }
+        }
         if (query.length < 2) {
           hidePlayerResults();
           return;
@@ -1488,7 +1599,7 @@
           await updateMilitaryDamageBonus(player, key);
           localStorage.setItem("selected_player_name", player.username || id);
           /* Deprecated: buildRegionDistances(player.location); */
-          els.playerSearch.value = player.username || id;
+          playerSearchQuery = player.username || id;
           renderPlayer();
           if (reports.length) load();
         } catch (e) {
@@ -2165,9 +2276,25 @@
         if (hp) hp.textContent = `${fmtEstimate(value.hp, 1)} HP`;
         if (hunger) hunger.textContent = `${value.hunger} items`;
       }
+      function bindPlayerSearch() {
+        els.playerSearch = els.player.querySelector("#playerSearch");
+        els.playerResults = els.player.querySelector("#playerResults");
+        if (!els.playerSearch) return;
+        els.playerSearch.oninput = () => {
+          clearTimeout(playerSearchTimer);
+          playerSearchTimer = setTimeout(searchPlayerInput, 250);
+        };
+        els.playerSearch.onfocus = () => {
+          if (els.playerSearch.value.trim().length >= 2 && els.playerResults.innerHTML)
+            els.playerResults.style.display = "block";
+        };
+      }
       function renderPlayer() {
+        const selectorHtml = `<div class="player-selector"><div class="player-selector-field player-field"><label for="playerSearch">Player</label><div class="player-search"><input id="playerSearch" class="input" type="text" placeholder="Search player by name" autocomplete="off" value="${esc(player?.username || playerSearchQuery || "")}" /><div id="playerResults" class="player-results" style="display:none"></div></div></div>${player ? `<div class="player-selector-field damage-field"><label for="damageBonusPercent">Damage bonus (%)</label><input id="damageBonusPercent" class="input" type="number" min="0" step="0.1" value="${esc(damageBonusPercent)}" /></div>${buffIndicatorHtml(player)}` : ""}</div>`;
         if (!player) {
-          els.player.style.display = "none";
+          els.player.innerHTML = `${selectorHtml}<div class="player-empty">Select a player to view combat stats and enable player-specific battle filters.</div>`;
+          els.player.style.display = "block";
+          bindPlayerSearch();
           return;
         }
         let h = player.skills?.health?.currentBarValue ?? 0,
@@ -2203,7 +2330,7 @@
             foodTotal === 0
               ? "No food"
               : `${foodLoadout.bread ? foodLoadout.bread + " bread " : ""}${foodLoadout.steak ? foodLoadout.steak + " steak " : ""}${foodLoadout.fish ? foodLoadout.fish + " fish" : ""}`.trim();
-        els.player.innerHTML = `<div class="player-card-header"><div class="player-identity"><span class="player-title">Selected player</span><span class="player-name">${esc(player.username || player._id)}</span>${buffIndicatorHtml(player)}</div><span class="player-refresh-countdown" id="playerRefreshCountdown"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity=".25"></circle><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path></svg><span>Refreshing in ${playerRefreshCountdown}s</span></span></div><div class="player-stats"><div class="player-stat"><div class="player-stat-label">Health</div><div class="player-stat-value">${Number(h).toFixed(1)} / ${esc(ht)}</div></div><div class="player-stat"><div class="player-stat-label">Hunger</div><div class="player-stat-value">${Number(hunger).toFixed(1)} / ${esc(hungerTotal)}</div></div><div class="player-stat"><div class="player-stat-label">Avg dmg / hit</div><div class="player-stat-value">${calc ? fmtEstimate(calc.avgDamage) : "—"}</div></div><div class="player-stat player-stat-hits"><div class="player-stat-label">Hits available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.hits) : "—"}</div></div><div class="player-stat player-stat-wide player-stat-total"><div class="player-stat-label">Total damage available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.totalDamage) : "—"}</div>${calc ? `<div class="player-stat-label">Base ${fmtEstimate(calc.baseTotalDamage)} + ${fmtEstimate(damageBonusPercent, 1)}%</div>` : ""}</div></div>${overflowHtml(player)}<div class="damage-bonus-control"><label for="damageBonusPercent">Damage bonus modifier (%)</label><input id="damageBonusPercent" class="input" type="number" min="0" step="0.1" value="${esc(damageBonusPercent)}" /><span>Automatically set from the military unit headquarters upgrade (5% per level). You can adjust it manually.</span></div><div class="food-summary"><span class="food-summary-text">Food: ${esc(foodLabel)}</span><button type="button" class="food-toggle" id="foodToggle">${foodExpanded ? "Done" : "Edit food"}</button></div><div class="food-plan" ${foodExpanded ? "" : "hidden"}><div class="food-plan-head"><span class="food-plan-title">Food loadout</span><span class="food-remaining">${foodTotal}/4 uses</span></div><div class="food-presets">${[
+        els.player.innerHTML = `${selectorHtml}<span class="player-refresh-countdown" id="playerRefreshCountdown"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity=".25"></circle><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path></svg><span>Refreshing in ${playerRefreshCountdown}s</span></span><div class="player-stats"><div class="player-stat"><div class="player-stat-label">Health</div><div class="player-stat-value">${Number(h).toFixed(1)} / ${esc(ht)}</div></div><div class="player-stat"><div class="player-stat-label">Hunger</div><div class="player-stat-value">${Number(hunger).toFixed(1)} / ${esc(hungerTotal)}</div></div><div class="player-stat"><div class="player-stat-label">Avg dmg / hit</div><div class="player-stat-value">${calc ? fmtEstimate(calc.avgDamage) : "—"}</div></div><div class="player-stat player-stat-hits"><div class="player-stat-label">Hits available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.hits) : "—"}</div></div><div class="player-stat player-stat-wide player-stat-total"><div class="player-stat-label">Total damage available</div><div class="player-stat-value">${calc ? fmtEstimate(calc.totalDamage) : "—"}</div>${calc ? `<div class="player-stat-label">Base ${fmtEstimate(calc.baseTotalDamage)} + ${fmtEstimate(damageBonusPercent, 1)}%</div>` : ""}</div></div>${overflowHtml(player)}<div class="food-summary"><span class="food-summary-text">Food: ${esc(foodLabel)}</span><button type="button" class="food-toggle" id="foodToggle">${foodExpanded ? "Done" : "Edit food"}</button></div><div class="food-plan" ${foodExpanded ? "" : "hidden"}><div class="food-plan-head"><span class="food-plan-title">Food loadout</span><span class="food-remaining">${foodTotal}/4 uses</span></div><div class="food-presets">${[
           { id: "none", label: "No food" },
           { id: "2bread", label: "2 breads" },
           { id: "1steak", label: "1 steak" },
@@ -2216,6 +2343,7 @@
           .join(
             "",
           )}</div>${foods.map((f) => `<div class="food-row"><div class="food-name">${f.name}<span class="food-heal">+${fmtEstimate(((Number(ht) || 0) * f.heal) / 100, 1)} HP each (${f.heal}% max HP)</span></div><div class="food-stepper"><button type="button" data-food-change="${f.id}" data-delta="-1" aria-label="Remove one ${f.name.toLowerCase()}" ${foodLoadout[f.id] === 0 ? "disabled" : ""}>−</button><span class="food-count">${foodLoadout[f.id]}</span><button type="button" data-food-change="${f.id}" data-delta="1" aria-label="Add one ${f.name.toLowerCase()}" ${foodTotal >= 4 ? "disabled" : ""}>+</button></div></div>`).join("")}</div><div class="player-combat-note"><span class="alpha-inline"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5 14.5 13H1.5L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 5.2v3.7M8 11.1v.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg> Alpha · Untested</span>${calc ? `Combat figures are estimates and may be inaccurate. Selected food adds about ${fmtEstimate(calc.effectiveHealing, 1)} HP; model assumes base HP drain 10, reduced by armor and dodge.` : "Combat calculations unavailable for this player; figures have not been validated."}</div>`;
+        bindPlayerSearch();
         els.player.querySelector("#damageBonusPercent").onchange = (e) => {
           const value = Number(e.target.value);
           damageBonusPercent = Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -2277,8 +2405,35 @@
             : "";
         return `<div class="player-participation"><span class="p-icon" aria-hidden="true">⚔</span><span class="p-damage">${compact(p.damage)} damage</span><span aria-hidden="true">·</span><span class="p-loot">${esc(p.tier)} loot</span>${warning}</div>`;
       }
+      function updateBattleFilterControls() {
+        const hasPlayer = Boolean(selectedPlayerId);
+        els.hideLooted.disabled = !hasPlayer;
+        els.hideLooted.checked = hideLootedBattles && hasPlayer;
+        els.hideLootedHelp.textContent = hasPlayer
+          ? "Uses current-round loot tier"
+          : "Select a player to enable";
+        renderPlayer();
+      document.querySelectorAll("[data-end-filter]").forEach((button) => {
+          const active = Number(button.dataset.endFilter) === endTimeFilterMinutes;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+      }
       function render() {
-        let sorted = [...reports].sort((a, b) => {
+        updateBattleFilterControls();
+        const now = Date.now();
+        let filtered = reports.filter((b) => {
+          if (endTimeFilterMinutes > 0) {
+            const estimate = eta(b);
+            // eta() is the app's existing estimate for the current round's completion.
+            if (estimate.m === null || estimate.m < 0 || estimate.m > endTimeFilterMinutes)
+              return false;
+          }
+          if (hideLootedBattles && selectedPlayerId && b.player_round?.tier)
+            return false;
+          return true;
+        });
+        let sorted = [...filtered].sort((a, b) => {
           let x = lootSortInfo(a, sortKey),
             y = lootSortInfo(b, sortKey);
           return (
@@ -2295,7 +2450,8 @@
             ? `Ordered by ${sortKey.toUpperCase()} threshold + loot availability`
             : `Ordered by lowest ${sortKey.toUpperCase()} threshold`;
         if (!sorted.length) {
-          els.grid.innerHTML = `<div class="empty">No active battles could be loaded.</div>`;
+          els.grid.innerHTML = `<div class="empty">${reports.length ? "No battles match the selected filters." : "No active battles could be loaded."}</div>`;
+          els.footer.textContent = `0 of ${reports.length} active battles shown`;
           return;
         }
         els.grid.innerHTML = sorted
@@ -2324,7 +2480,7 @@
             return `<a class="card${cardTier}" href="https://app.warera.io/battle/${encodeURIComponent(b.id)}" target="_blank" rel="noopener noreferrer"><!-- Deprecated region distance and travel-cost display omitted. -->${playerParticipationHtml(b)}<div class="card-head"><h3>${esc(b.region)}</h3><div class="meta">ROUND ${b.round_number || 1}<span> • </span>${(b.participants || 0).toLocaleString()} PLAYERS</div>${lootDiagnosisHtml(b, sortKey)}${loadBadge}</div>${lootMeta(b)}<div class="sides"><div class="side def">${esc(b.defender)}<span class="pts">${dp.toLocaleString()} / 300 PTS</span></div><div class="match-center"><div class="series-score">${b.defender_won_rounds || 0} – ${b.attacker_won_rounds || 0}</div><div class="eta">${etaHtml(e)}</div></div><div class="side att">${esc(b.attacker)}<span class="pts">${ap.toLocaleString()} / 300 PTS</span></div></div><div class="points"><div class="pfill def" style="width:${dpct / 2}%"></div><div class="pfill att" style="width:${apct / 2}%"></div><div class="center"></div></div><div class="damage-wrap"><svg class="damage-pointer" viewBox="0 0 16 8" aria-hidden="true"><path d="M0 0H16L8 8Z" fill="#f8fafc"/></svg><div class="damage"><div class="def" style="width:${ddpct}%">${compact(dd)}</div><div class="att" style="width:${adpct}%">${compact(ad)}</div></div></div><div class="thresholds">${thresholdHtml(b.thresholds, b.tier_counts, `Round ${b.round_number || 1} Loot`, b.round_loot_quantity, b.round_participants, b.last_round_tier)}${thresholdHtml(b.overall_thresholds, b.overall_tier_counts, "Overall Battle Loot", b.battle_loot_quantity, b.participants, b.overall_last_tier)}</div></a>`;
           })
           .join("");
-        els.footer.textContent = `${sorted.length} active battles being tracked`;
+        els.footer.textContent = `${sorted.length} of ${reports.length} active battles shown`;
       }
       async function refreshPlayerInfo() {
         if (playerRefreshInFlight || !selectedPlayerId) return;
@@ -2390,7 +2546,7 @@
             : null;
           if (player) {
             await updateMilitaryDamageBonus(player, key);
-            els.playerSearch.value = player.username || selectedPlayerId;
+            playerSearchQuery = player.username || selectedPlayerId;
           } else {
             damageBonusPercent = 0;
           }
@@ -2418,20 +2574,22 @@
           updateRefreshIndicator();
         }
       }
+      document.querySelectorAll("[data-end-filter]").forEach((button) => {
+        button.onclick = () => {
+          endTimeFilterMinutes = Number(button.dataset.endFilter) || 0;
+          render();
+        };
+      });
+      els.hideLooted.onchange = () => {
+        hideLootedBattles = els.hideLooted.checked;
+        render();
+      };
+      setInterval(() => {
+        if (endTimeFilterMinutes > 0 && reports.length) render();
+      }, 5000);
       setInterval(updateBuffCountdowns, 15000);
       setInterval(tickPlayerRefreshCountdown, 1000);
       setInterval(updateRefreshIndicator, 1000);
-      els.playerSearch.oninput = () => {
-        clearTimeout(playerSearchTimer);
-        playerSearchTimer = setTimeout(searchPlayerInput, 250);
-      };
-      els.playerSearch.onfocus = () => {
-        if (
-          els.playerSearch.value.trim().length >= 2 &&
-          els.playerResults.innerHTML
-        )
-          els.playerResults.style.display = "block";
-      };
       els.load.onclick = load;
       els.key.onkeydown = (e) => {
         if (e.key === "Enter") load();
@@ -2448,7 +2606,7 @@
         els.remember.checked = false;
         selectedPlayerId = "";
         player = null;
-        els.playerSearch.value = "";
+        playerSearchQuery = "";
         hidePlayerResults();
         renderPlayer();
         status("Saved API key cleared.");
